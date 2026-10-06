@@ -15,7 +15,7 @@ describe('normRepo', () => {
   });
 
   it('sem org e sem owner, explica o que falta', () => {
-    expect(() => normRepo('repo')).toThrow(/FORGE_ORG/);
+    expect(() => normRepo('repo')).toThrow(/PYATILETKA_ORG/);
   });
 });
 

@@ -48,10 +48,10 @@ const ENV_KEYS = [
   'GITEA_TOKEN',
   'GITHUB_TOKEN',
   'GITHUB_API_URL',
-  'FORGE_PROVIDER',
-  'FORGE_ORG',
-  'FORGE_PROSE',
-  'FORGE_DEFAULT_REPO',
+  'PYATILETKA_PROVIDER',
+  'PYATILETKA_ORG',
+  'PYATILETKA_PROSE',
+  'PYATILETKA_DEFAULT_REPO',
 ];
 
 /**
@@ -65,7 +65,7 @@ async function loadPlugin(over: Record<string, string> = {}) {
   for (const k of ENV_KEYS) delete process.env[k];
   Object.assign(
     process.env,
-    { GITEA_URL: 'https://gitea.test', GITEA_TOKEN: 'token-de-teste', FORGE_ORG: 'org' },
+    { GITEA_URL: 'https://gitea.test', GITEA_TOKEN: 'token-de-teste', PYATILETKA_ORG: 'org' },
     over
   );
   try {
@@ -104,8 +104,8 @@ describe('PyatiletkaPlugin', () => {
     await expect(loadPlugin({ GITEA_TOKEN: '' })).rejects.toThrow(/GITEA_TOKEN ausente/);
   });
 
-  it('pe o provider do ambiente quando FORGE_PROVIDER manda', async () => {
-    await expect(loadPlugin({ FORGE_PROVIDER: 'gitea' })).resolves.toBeDefined();
+  it('pe o provider do ambiente quando PYATILETKA_PROVIDER manda', async () => {
+    await expect(loadPlugin({ PYATILETKA_PROVIDER: 'gitea' })).resolves.toBeDefined();
   });
 });
 

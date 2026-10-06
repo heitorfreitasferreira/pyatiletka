@@ -211,7 +211,7 @@ export function branchTools({
         const fromIdx = order.indexOf(args.from);
         if (fromIdx === -1) {
           throw new Error(
-            `branch "${args.from}" nao esta na ordem de promocao (${order.join(' -> ')}). Ajuste FORGE_PROMOTE_ORDER se for outra.`
+            `branch "${args.from}" nao esta na ordem de promocao (${order.join(' -> ')}). Ajuste PYATILETKA_PROMOTE_ORDER se for outra.`
           );
         }
         const repo = resolve(args.repo);

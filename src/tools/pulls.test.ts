@@ -192,14 +192,14 @@ describe('pr_list', () => {
     expect(await run('pr_list', { state: 'all' })).toContain('#3 ');
   });
 
-  it('mine usa o FORGE_LOGIN', async () => {
+  it('mine usa o PYATILETKA_LOGIN', async () => {
     expect(await run('pr_list', { mine: true })).toContain('#1 ');
     expect(await run('pr_list', { mine: true })).not.toContain('#2 ');
   });
 
-  it('mine sem FORGE_LOGIN explica o que falta', async () => {
+  it('mine sem PYATILETKA_LOGIN explica o que falta', async () => {
     tools = pullTools({ ctx: ctxFor(forge, { login: undefined }) }) as never;
-    expect(await runFail('pr_list', { mine: true })).toContain('FORGE_LOGIN');
+    expect(await runFail('pr_list', { mine: true })).toContain('PYATILETKA_LOGIN');
   });
 
   it('repos com glob varre a org', async () => {

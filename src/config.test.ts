@@ -5,11 +5,11 @@ const gitea = { GITEA_URL: 'https://gitea.example.com/', GITEA_TOKEN: 't' };
 const github = { GITHUB_TOKEN: 't' };
 
 describe('resolveProvider', () => {
-  it('usa FORGE_PROVIDER quando presente', () => {
-    expect(resolveProvider({ FORGE_PROVIDER: 'github' }, 'gitea')).toBe('github');
+  it('usa PYATILETKA_PROVIDER quando presente', () => {
+    expect(resolveProvider({ PYATILETKA_PROVIDER: 'github' }, 'gitea')).toBe('github');
   });
 
-  it('cai no remote quando FORGE_PROVIDER falta', () => {
+  it('cai no remote quando PYATILETKA_PROVIDER falta', () => {
     expect(resolveProvider({}, 'github')).toBe('github');
   });
 
@@ -19,7 +19,7 @@ describe('resolveProvider', () => {
   });
 
   it('reclama de valor invalido', () => {
-    expect(() => resolveProvider({ FORGE_PROVIDER: 'gitlab' })).toThrow(ConfigError);
+    expect(() => resolveProvider({ PYATILETKA_PROVIDER: 'gitlab' })).toThrow(ConfigError);
   });
 });
 
@@ -42,24 +42,24 @@ describe('loadConfig', () => {
     expect(c.baseUrl).toBe('https://gh.corp/api/v3');
   });
 
-  it('deriva org do FORGE_DEFAULT_REPO', () => {
-    const c = loadConfig({ ...github, FORGE_DEFAULT_REPO: 'acme/repo' });
+  it('deriva org do PYATILETKA_DEFAULT_REPO', () => {
+    const c = loadConfig({ ...github, PYATILETKA_DEFAULT_REPO: 'acme/repo' });
     expect(c.org).toBe('acme');
     expect(c.defaultRepo).toBe('acme/repo');
   });
 
   it('exige token', () => {
     expect(() => loadConfig({ GITEA_URL: 'https://x' })).toThrow(/GITEA_TOKEN/);
-    expect(() => loadConfig({ FORGE_PROVIDER: 'github' })).toThrow(/GITHUB_TOKEN/);
+    expect(() => loadConfig({ PYATILETKA_PROVIDER: 'github' })).toThrow(/GITHUB_TOKEN/);
   });
 
   it('exige provider quando nada esta configurado', () => {
     expect(() => loadConfig({})).toThrow(/Nenhum provider/);
   });
 
-  it('valida FORGE_PROSE', () => {
-    expect(loadConfig({ ...github, FORGE_PROSE: 'warn' }).prose).toBe('warn');
-    expect(() => loadConfig({ ...github, FORGE_PROSE: 'nope' })).toThrow(/FORGE_PROSE/);
+  it('valida PYATILETKA_PROSE', () => {
+    expect(loadConfig({ ...github, PYATILETKA_PROSE: 'warn' }).prose).toBe('warn');
+    expect(() => loadConfig({ ...github, PYATILETKA_PROSE: 'nope' })).toThrow(/PYATILETKA_PROSE/);
   });
 });
 
@@ -68,21 +68,24 @@ describe('readPromoteOrder', () => {
     expect(loadConfig({ GITHUB_TOKEN: 'x' }).promoteOrder).toEqual(['staging', 'production']);
   });
 
-  it('FORGE_PROMOTE_ORDER substitui, ignorando espacos', () => {
-    const c = loadConfig({ GITHUB_TOKEN: 'x', FORGE_PROMOTE_ORDER: ' main , staging , prod ' });
+  it('PYATILETKA_PROMOTE_ORDER substitui, ignorando espacos', () => {
+    const c = loadConfig({
+      GITHUB_TOKEN: 'x',
+      PYATILETKA_PROMOTE_ORDER: ' main , staging , prod ',
+    });
     expect(c.promoteOrder).toEqual(['main', 'staging', 'prod']);
   });
 
   it('uma branch so nao vale como ordem', () => {
-    expect(() => loadConfig({ GITHUB_TOKEN: 'x', FORGE_PROMOTE_ORDER: 'main' })).toThrow(
-      /FORGE_PROMOTE_ORDER invalido/
+    expect(() => loadConfig({ GITHUB_TOKEN: 'x', PYATILETKA_PROMOTE_ORDER: 'main' })).toThrow(
+      /PYATILETKA_PROMOTE_ORDER invalido/
     );
   });
 });
 
-describe('FORGE_DEFAULT_BRANCH', () => {
+describe('PYATILETKA_DEFAULT_BRANCH', () => {
   it('vira defaultBranch', () => {
-    expect(loadConfig({ GITHUB_TOKEN: 'x', FORGE_DEFAULT_BRANCH: 'main' }).defaultBranch).toBe(
+    expect(loadConfig({ GITHUB_TOKEN: 'x', PYATILETKA_DEFAULT_BRANCH: 'main' }).defaultBranch).toBe(
       'main'
     );
   });

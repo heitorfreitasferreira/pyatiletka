@@ -3,7 +3,7 @@ import type { ProviderName } from './config';
 
 /**
  * Resolucao do repo a partir do remote do clone. Funciona para qualquer
- * diretorio e revela o provider, o que dispensa `FORGE_PROVIDER` na maioria
+ * diretorio e revela o provider, o que dispensa `PYATILETKA_PROVIDER` na maioria
  * dos casos e nao depende do nome da pasta.
  */
 

@@ -32,29 +32,42 @@ Com opcoes:
 
 Tudo vem do ambiente. Nao ha arquivo de config e o plugin nao le `~/.config/tea`.
 
+As quatro primeiras sao os nomes que os dois providers ja usam. O resto leva o
+prefixo do pacote, que e o que evita colisao com variavel de outro programa
+(`GITHUB_*`, por exemplo, ja vem populado dentro do GitHub Actions).
+
 | Variavel | Para que serve |
 |---|---|
 | `GITEA_URL` | Base do Gitea, sem barra final. Ex.: `https://gitea.example.com` |
 | `GITEA_TOKEN` | Token do Gitea |
 | `GITHUB_TOKEN` | Token do GitHub |
 | `GITHUB_API_URL` | Base da API. Default `https://api.github.com` |
-| `FORGE_PROVIDER` | `gitea` ou `github`. Sem isso o remote do clone decide |
-| `FORGE_ORG` | Org usada em `repo` sem owner, na varredura de org e nos runners |
-| `FORGE_DEFAULT_REPO` | Repo `owner/nome` para tools chamadas fora de um clone |
-| `FORGE_DEFAULT_BRANCH` | Branch usada por `ci_wait` e `ci_dispatch` quando o pedido nao informa |
-| `FORGE_LOGIN` | Seu login, para o filtro `mine` de `pr_list` |
-| `FORGE_PROMOTE_ORDER` | Ordem de `branch_promote`. Default `staging,production` |
-| `FORGE_PROSE` | `off`, `warn` ou `block`. Default `block` |
+| `PYATILETKA_PROVIDER` | `gitea` ou `github`. Sem isso o remote do clone decide |
+| `PYATILETKA_ORG` | Org usada em `repo` sem owner, na varredura de org e nos runners |
+| `PYATILETKA_DEFAULT_REPO` | Repo `owner/nome` para tools chamadas fora de um clone |
+| `PYATILETKA_DEFAULT_BRANCH` | Branch usada por `ci_wait` e `ci_dispatch` quando o pedido nao informa |
+| `PYATILETKA_LOGIN` | Seu login, para o filtro `mine` de `pr_list` |
+| `PYATILETKA_PROMOTE_ORDER` | Ordem de `branch_promote`. Default `staging,production` |
+| `PYATILETKA_PROSE` | `off`, `warn` ou `block`. Default `block` |
 
-Provider: `FORGE_PROVIDER` manda. Sem ele, o remote do clone decide, e por
+Provider: `PYATILETKA_PROVIDER` manda. Sem ele, o remote do clone decide, e por
 ultimo o ambiente (`GITEA_URL` presente, senao `GITHUB_TOKEN`).
+
+O plugin le o ambiente do processo do opencode, entao a variavel precisa estar
+exportada no shell que launched opencode. O `opencode.json` nao tem campo `env`.
 
 Exemplo minimo no shell:
 
 ```
 export GITEA_URL=https://gitea.example.com
 export GITEA_TOKEN=...
-export FORGE_ORG=minha-org
+export PYATILETKA_ORG=minha-org
+```
+
+Para nao repetir isso a cada sessao, um arquivo fora do repo:
+
+```bash
+source ~/.config/pyatiletka/env && opencode
 ```
 
 ### Uma tool por provider
@@ -141,8 +154,8 @@ titulo de issue vale, entao o titulo vai como veio.
 Para desligar ou deixar so avisar:
 
 ```
-export FORGE_PROSE=warn
-export FORGE_PROSE=off
+export PYATILETKA_PROSE=warn
+export PYATILETKA_PROSE=off
 ```
 
 ## Tools
@@ -199,7 +212,7 @@ para o CI, nao para passar por cima de conflito.
 | `ci_runners` | runners da org, com estado e labels |
 
 `ci_wait` sem `run` e sem `branch` e recusado. O plugin nao adivinha qual
-execucao esperar: informe `FORGE_DEFAULT_BRANCH` se quiser um padrao.
+execucao esperar: informe `PYATILETKA_DEFAULT_BRANCH` se quiser um padrao.
 
 ### Branch
 
@@ -213,11 +226,11 @@ execucao esperar: informe `FORGE_DEFAULT_BRANCH` se quiser um padrao.
 `branch_promote` e `commit_list` usam o git local e precisam do clone no
 workspace. As outras duas falam com o forge e funcionam sem clone.
 
-A ordem de promocao vem de `FORGE_PROMOTE_ORDER` e o padrao e
+A ordem de promocao vem de `PYATILETKA_PROMOTE_ORDER` e o padrao e
 `staging,production`:
 
 ```
-export FORGE_PROMOTE_ORDER=develop,staging,production
+export PYATILETKA_PROMOTE_ORDER=develop,staging,production
 ```
 
 Numa ordem, cada branch so sobe para as que vem depois dela. `branch_promote`
@@ -241,10 +254,10 @@ workflow configurado nao espera nada.
 
 1. o argumento `repo` da tool
 2. o repo da issue vinculada a sessao
-3. `FORGE_DEFAULT_REPO`
+3. `PYATILETKA_DEFAULT_REPO`
 4. o remote do clone
 
-Aceita `repo`, `owner/repo` e `repo` prefixado com `FORGE_ORG`. `repos` com
+Aceita `repo`, `owner/repo` e `repo` prefixado com `PYATILETKA_ORG`. `repos` com
 lista ou glob (`api-*`) varre varios repos em uma chamada.
 
 ## Estado em disco

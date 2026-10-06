@@ -37,7 +37,7 @@ const normUrl = (v: string) => v.trim().replace(/\/+$/, '');
 export const DEFAULT_PROMOTE_ORDER = ['staging', 'production'];
 
 function readPromoteOrder(env: NodeJS.ProcessEnv): string[] {
-  const raw = env.FORGE_PROMOTE_ORDER?.trim();
+  const raw = env.PYATILETKA_PROMOTE_ORDER?.trim();
   if (!raw) return DEFAULT_PROMOTE_ORDER;
   const order = raw
     .split(',')
@@ -45,30 +45,34 @@ function readPromoteOrder(env: NodeJS.ProcessEnv): string[] {
     .filter(Boolean);
   if (order.length < 2) {
     throw new ConfigError(
-      `FORGE_PROMOTE_ORDER invalido: "${env.FORGE_PROMOTE_ORDER}". Use duas ou mais branches separadas por virgula.`
+      `PYATILETKA_PROMOTE_ORDER invalido: "${env.PYATILETKA_PROMOTE_ORDER}". Use duas ou mais branches separadas por virgula.`
     );
   }
   return order;
 }
 
 function readProse(env: NodeJS.ProcessEnv): ProseMode {
-  const v = (env.FORGE_PROSE ?? 'block').trim().toLowerCase();
+  const v = (env.PYATILETKA_PROSE ?? 'block').trim().toLowerCase();
   if (v === 'off' || v === 'warn' || v === 'block') return v;
-  throw new ConfigError(`FORGE_PROSE invalido: "${env.FORGE_PROSE}". Use off, warn ou block.`);
+  throw new ConfigError(
+    `PYATILETKA_PROSE invalido: "${env.PYATILETKA_PROSE}". Use off, warn ou block.`
+  );
 }
 
 /**
- * Provider: `FORGE_PROVIDER` manda. Sem ele, o remote do clone decide, e por
+ * Provider: `PYATILETKA_PROVIDER` manda. Sem ele, o remote do clone decide, e por
  * ultimo o ambiente (GITEA_URL presente, senao GITHUB_TOKEN).
  */
 export function resolveProvider(
   env: NodeJS.ProcessEnv,
   remoteProvider?: ProviderName
 ): ProviderName | undefined {
-  const explicit = env.FORGE_PROVIDER?.trim().toLowerCase();
+  const explicit = env.PYATILETKA_PROVIDER?.trim().toLowerCase();
   if (explicit) {
     if (explicit === 'gitea' || explicit === 'github') return explicit;
-    throw new ConfigError(`FORGE_PROVIDER invalido: "${env.FORGE_PROVIDER}". Use gitea ou github.`);
+    throw new ConfigError(
+      `PYATILETKA_PROVIDER invalido: "${env.PYATILETKA_PROVIDER}". Use gitea ou github.`
+    );
   }
   if (remoteProvider) return remoteProvider;
   if (env.GITEA_URL) return 'gitea';
@@ -85,9 +89,9 @@ export function loadConfig(env: NodeJS.ProcessEnv, remoteProvider?: ProviderName
     );
   }
 
-  const defaultRepo = env.FORGE_DEFAULT_REPO?.trim() || undefined;
-  const org = env.FORGE_ORG?.trim() || defaultRepo?.split('/')[0] || undefined;
-  const defaultBranch = env.FORGE_DEFAULT_BRANCH?.trim() || undefined;
+  const defaultRepo = env.PYATILETKA_DEFAULT_REPO?.trim() || undefined;
+  const org = env.PYATILETKA_ORG?.trim() || defaultRepo?.split('/')[0] || undefined;
+  const defaultBranch = env.PYATILETKA_DEFAULT_BRANCH?.trim() || undefined;
   const promoteOrder = readPromoteOrder(env);
 
   if (provider === 'gitea') {
@@ -102,7 +106,7 @@ export function loadConfig(env: NodeJS.ProcessEnv, remoteProvider?: ProviderName
       token,
       org,
       defaultRepo,
-      login: env.FORGE_LOGIN?.trim() || undefined,
+      login: env.PYATILETKA_LOGIN?.trim() || undefined,
       defaultBranch,
       promoteOrder,
       prose: readProse(env),
@@ -118,7 +122,7 @@ export function loadConfig(env: NodeJS.ProcessEnv, remoteProvider?: ProviderName
     token,
     org,
     defaultRepo,
-    login: env.FORGE_LOGIN?.trim() || undefined,
+    login: env.PYATILETKA_LOGIN?.trim() || undefined,
     defaultBranch,
     promoteOrder,
     prose: readProse(env),

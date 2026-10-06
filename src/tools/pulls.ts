@@ -122,7 +122,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
         mine: tool.schema
           .boolean()
           .optional()
-          .describe('So PRs abertos por mim. Depende de FORGE_LOGIN.'),
+          .describe('So PRs abertos por mim. Depende de PYATILETKA_LOGIN.'),
         limit: tool.schema.number().optional().describe('Max PRs por repo (default 20).'),
       },
       async execute(args) {
@@ -138,7 +138,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
             limit: Math.max(limit, 50),
           });
           if (args.mine) {
-            if (!login) throw new Error('`mine` precisa de FORGE_LOGIN com o seu login.');
+            if (!login) throw new Error('`mine` precisa de PYATILETKA_LOGIN com o seu login.');
             list = list.filter((p) => p.user?.toLowerCase() === login);
           }
           return { repo, list: list.slice(0, limit) };

@@ -22,7 +22,7 @@ export type Ctx = {
   config: Config;
   /** Repo do clone, quando `directory` esta dentro de um. */
   remote?: string;
-  /** SlugPadrao: `FORGE_DEFAULT_REPO`, o remote do clone, ou o que a tool recebeu. */
+  /** SlugPadrao: `PYATILETKA_DEFAULT_REPO`, o remote do clone, ou o que a tool recebeu. */
   defaultRepo?: string;
   notify(message: string, variant?: NotifyVariant): void;
 };
@@ -34,7 +34,8 @@ export function normRepo(value: string, org?: string): string {
     .replace(/^\/+|\/+$/g, '')
     .replace(/\.git$/, '');
   if (v.includes('/')) return v;
-  if (!org) throw new Error(`repo "${value}" sem org. Informe owner/repo ou defina FORGE_ORG.`);
+  if (!org)
+    throw new Error(`repo "${value}" sem org. Informe owner/repo ou defina PYATILETKA_ORG.`);
   return `${org}/${v}`;
 }
 
@@ -91,7 +92,7 @@ export function pickRepo(ctx: Ctx, arg?: string, binding?: Binding): string {
   const wanted = arg ?? binding?.repo ?? ctx.defaultRepo;
   if (!wanted) {
     throw new Error(
-      'Nao deu para saber o repo. Informe `repo` (owner/nome), defina FORGE_DEFAULT_REPO, ' +
+      'Nao deu para saber o repo. Informe `repo` (owner/nome), defina PYATILETKA_DEFAULT_REPO, ' +
         'ou rode dentro de um clone com remote.'
     );
   }
@@ -125,7 +126,8 @@ export async function expandRepos(ctx: Ctx, wanted?: string[]): Promise<string[]
   const all = org ? await ctx.forge.listRepos(org) : [];
 
   if (!wanted?.length) {
-    if (!org) throw new Error('Varredura de org precisa de FORGE_ORG ou FORGE_DEFAULT_REPO.');
+    if (!org)
+      throw new Error('Varredura de org precisa de PYATILETKA_ORG ou PYATILETKA_DEFAULT_REPO.');
     return all;
   }
 

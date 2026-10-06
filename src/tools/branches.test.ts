@@ -210,7 +210,7 @@ describe('branch_compare', () => {
 
 describe('branch_promote', () => {
   it('branch fora da ordem e recusada', async () => {
-    expect(await runFail('branch_promote', { from: 'main' })).toContain('FORGE_PROMOTE_ORDER');
+    expect(await runFail('branch_promote', { from: 'main' })).toContain('PYATILETKA_PROMOTE_ORDER');
   });
 
   it('branch fora da ordem e recusada antes de procurar o repo', async () => {
