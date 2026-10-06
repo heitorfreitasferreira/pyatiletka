@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { Config } from '../config';
+import { shapeLog } from '../core/logs';
 import { ForgeError, Http } from './http';
 import type {
   CreateIssueInput,
@@ -613,27 +614,7 @@ export class GiteaForge implements Forge {
       log = blocks.filter((b) => b.slice(0, 200).toLowerCase().includes(key)).join('');
       if (!log.trim()) return `(nenhum job casou com "${opts.step}")`;
     }
-    if (opts.grep) {
-      const re = new RegExp(opts.grep, 'i');
-      log = log
-        .split('\n')
-        .filter((l) => re.test(l))
-        .join('\n');
-    }
-    if (!opts.full) {
-      const errs = errorLines(log);
-      log = errs.length
-        ? `(${errs.length} linhas de erro; \`full:true\` traz tudo)\n${errs.join('\n')}`
-        : '(nenhuma linha de erro encontrada; `full:true` traz o log inteiro)';
-    }
-    const tail = opts.tail ?? 200;
-    const lines = log.split('\n');
-    const sliced = lines.length > tail ? lines.slice(-tail) : lines;
-    const header =
-      lines.length > tail
-        ? `(${lines.length} linhas no total, mostrando as ultimas ${tail})\n`
-        : '';
-    return `${header}${sliced.join('\n')}`;
+    return shapeLog(log, opts);
   }
 
   async getActionsConfig(repo: string): Promise<ForgeActionsConfig> {
@@ -760,31 +741,4 @@ export class GiteaForge implements Forge {
       })),
     };
   }
-}
-
-/** Linhas que parecem erro de build, para o resumo barato do log. */
-export function errorLines(log: string): string[] {
-  const pats = [
-    /\berror\b/i,
-    /\bfailed\b/i,
-    /\bfailure\b/i,
-    /\bcannot\b/i,
-    /\bdenied\b/i,
-    /\bnot found\b/i,
-    /\bexception\b/i,
-    /✗|❌/,
-  ];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of log.split('\n')) {
-    const line = raw.replace(/\x1b\[[0-9;]*m/g, '').trimEnd();
-    if (!line || line.length < 8) continue;
-    if (!pats.some((p) => p.test(line))) continue;
-    const key = line.trim();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(key.length > 200 ? `${key.slice(0, 200)}...` : key);
-    if (out.length >= 40) break;
-  }
-  return out;
 }
