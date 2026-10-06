@@ -36,6 +36,12 @@ export default tseslint.config(
       ...tseslint.configs.recommended.rules,
       ...prettier.rules,
       'prettier/prettier': 'error',
+      // O TypeScript ja checa nomes e tipos. As regras duplicadas do ESLint
+      // atrapalham assinaturas de interface e o uso de globais do runtime.
+      'no-undef': 'off',
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-control-regex': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       'no-console': 'error',
