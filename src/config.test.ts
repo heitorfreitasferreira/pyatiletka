@@ -62,3 +62,32 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...github, FORGE_PROSE: 'nope' })).toThrow(/FORGE_PROSE/);
   });
 });
+
+describe('readPromoteOrder', () => {
+  it('padrao e staging -> production', () => {
+    expect(loadConfig({ GITHUB_TOKEN: 'x' }).promoteOrder).toEqual(['staging', 'production']);
+  });
+
+  it('FORGE_PROMOTE_ORDER substitui, ignorando espacos', () => {
+    const c = loadConfig({ GITHUB_TOKEN: 'x', FORGE_PROMOTE_ORDER: ' main , staging , prod ' });
+    expect(c.promoteOrder).toEqual(['main', 'staging', 'prod']);
+  });
+
+  it('uma branch so nao vale como ordem', () => {
+    expect(() => loadConfig({ GITHUB_TOKEN: 'x', FORGE_PROMOTE_ORDER: 'main' })).toThrow(
+      /FORGE_PROMOTE_ORDER invalido/
+    );
+  });
+});
+
+describe('FORGE_DEFAULT_BRANCH', () => {
+  it('vira defaultBranch', () => {
+    expect(loadConfig({ GITHUB_TOKEN: 'x', FORGE_DEFAULT_BRANCH: 'main' }).defaultBranch).toBe(
+      'main'
+    );
+  });
+
+  it('ausente fica vazio, para a tool pedir o valor em vez de adivinhar', () => {
+    expect(loadConfig({ GITHUB_TOKEN: 'x' }).defaultBranch).toBeUndefined();
+  });
+});
