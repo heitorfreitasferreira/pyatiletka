@@ -31,6 +31,9 @@ export type HttpOptions = {
   retries?: number;
 };
 
+/** Opcoes de uma chamada avulsa. `pageParam` so faz sentido em `requestAll`. */
+type SendOptions = Omit<HttpOptions, 'pageParam'>;
+
 export class Http {
   constructor(
     readonly provider: ProviderName,
@@ -59,8 +62,8 @@ export class Http {
     return h;
   }
 
-  /** GET/POST/PATCH/DELETE em um path relativo a base. Retry em 5xx/429. */
-  async request<T = unknown>(path: string, opts: HttpOptions): Promise<T> {
+  /** Fetch com retry em 5xx/429. Devolve o corpo em texto, sem parsear. */
+  async requestText(path: string, opts: SendOptions = {}): Promise<string> {
     const { retries = 3, method = 'GET', body, headers } = opts;
     let lastErr: unknown;
 
@@ -79,11 +82,7 @@ export class Http {
         continue;
       }
 
-      if (res.ok) {
-        if (res.status === 204) return undefined as T;
-        const text = await res.text();
-        return (text ? JSON.parse(text) : undefined) as T;
-      }
+      if (res.ok) return res.text();
 
       const errBody = this.redact(await res.text());
       const err = new ForgeError(res.status, path, errBody);
@@ -95,6 +94,13 @@ export class Http {
       throw err;
     }
     throw lastErr instanceof Error ? lastErr : new Error(`falha ao chamar ${path}`);
+  }
+
+  /** GET/POST/PATCH/DELETE em um path relativo a base. Retry em 5xx/429. */
+  async request<T = unknown>(path: string, opts: HttpOptions): Promise<T> {
+    const { pageParam: _pageParam, ...rest } = opts;
+    const res = await this.requestText(path, rest);
+    return (res ? JSON.parse(res) : undefined) as T;
   }
 
   /** GET paginado ate `cap` itens. Para quando o lote vem menor que a pagina. */

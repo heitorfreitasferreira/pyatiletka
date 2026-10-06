@@ -15,6 +15,7 @@ import type {
   ForgeMilestone,
   ForgeProtection,
   ForgePull,
+  ForgePullFile,
   ForgeReview,
   ForgeReviewComment,
   ForgeRun,
@@ -496,11 +497,44 @@ export class GitHubForge implements Forge {
     return this.mapPull(created);
   }
 
-  async mergePull(repo: string, n: number, style: MergeStyle): Promise<string> {
+  async getPullFiles(repo: string, n: number): Promise<ForgePullFile[]> {
+    const out = await this.req<
+      {
+        filename: string;
+        status?: string;
+        additions?: number;
+        deletions?: number;
+        changes?: number;
+      }[]
+    >(`${pullPath(repo, n)}/files?per_page=100`, 'GET');
+    return (Array.isArray(out) ? out : []).map((f) => ({
+      filename: f.filename,
+      status: f.status ?? 'modified',
+      additions: f.additions ?? 0,
+      deletions: f.deletions ?? 0,
+      changes: f.changes ?? (f.additions ?? 0) + (f.deletions ?? 0),
+    }));
+  }
+
+  async getPullDiff(repo: string, n: number): Promise<string> {
+    return this.http.requestText(pullPath(repo, n), {
+      headers: { Accept: 'application/vnd.github.v3.diff' },
+    });
+  }
+
+  async mergePull(
+    repo: string,
+    n: number,
+    style: MergeStyle,
+    opts: { deleteBranch?: boolean } = {}
+  ): Promise<string> {
     // GitHub nao tem fast-forward-only. `rebase` e o mais proximo: aplica os
     // commits na base sem merge commit.
     const method = style === 'squash' ? 'squash' : style === 'merge' ? 'merge' : 'rebase';
-    await this.req(`${pullPath(repo, n)}/merge`, 'PUT', { merge_method: method });
+    await this.req(`${pullPath(repo, n)}/merge`, 'PUT', {
+      merge_method: method,
+      delete_branch_on_merge: opts.deleteBranch ?? false,
+    });
     return `merged (${style === 'fast-forward-only' ? 'rebase' : method})`;
   }
 

@@ -176,6 +176,14 @@ export type CreatePullInput = {
 
 export type MergeStyle = 'merge' | 'squash' | 'rebase' | 'fast-forward-only';
 
+export type ForgePullFile = {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+};
+
 export type ListRunsOptions = {
   branch?: string;
   event?: string;
@@ -238,8 +246,16 @@ export interface Forge {
   listReviews(repo: string, n: number): Promise<ForgeReview[]>;
   listReviewComments(repo: string, n: number, reviewId: number): Promise<ForgeReviewComment[]>;
   getChecks(repo: string, sha: string): Promise<ForgeChecks | undefined>;
+  getPullFiles(repo: string, n: number): Promise<ForgePullFile[]>;
+  /** Diff cru no formato unificado. */
+  getPullDiff(repo: string, n: number): Promise<string>;
   createPull(repo: string, input: CreatePullInput): Promise<ForgePull>;
-  mergePull(repo: string, n: number, style: MergeStyle): Promise<string>;
+  mergePull(
+    repo: string,
+    n: number,
+    style: MergeStyle,
+    opts?: { deleteBranch?: boolean }
+  ): Promise<string>;
 
   // -- pipeline ------------------------------------------------------------
   listRuns(repo: string, opts: ListRunsOptions): Promise<ForgeRun[]>;

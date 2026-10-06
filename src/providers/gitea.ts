@@ -15,6 +15,7 @@ import type {
   ForgeMilestone,
   ForgeProtection,
   ForgePull,
+  ForgePullFile,
   ForgeReview,
   ForgeReviewComment,
   ForgeRun,
@@ -567,7 +568,39 @@ export class GiteaForge implements Forge {
     return this.mapPull(created);
   }
 
-  async mergePull(repo: string, n: number, style: MergeStyle): Promise<string> {
+  async getPullFiles(repo: string, n: number): Promise<ForgePullFile[]> {
+    const out = await this.http.request<
+      {
+        filename: string;
+        status?: string;
+        additions?: number;
+        deletions?: number;
+        changes?: number;
+      }[]
+    >(`${pullPath(repo, n)}/files`, { pageParam: 'limit' });
+    return (Array.isArray(out) ? out : []).map((f) => ({
+      filename: f.filename,
+      status: f.status ?? 'modified',
+      additions: f.additions ?? 0,
+      deletions: f.deletions ?? 0,
+      changes: f.changes ?? (f.additions ?? 0) + (f.deletions ?? 0),
+    }));
+  }
+
+  // O campo `diff_url` do objeto PR devolve 404 neste Gitea. O caminho certo e
+  // o proprio recurso com sufixo `.diff`, que responde texto puro.
+  async getPullDiff(repo: string, n: number): Promise<string> {
+    return this.http.requestText(`${pullPath(repo, n)}.diff`, {
+      headers: { Accept: 'text/plain' },
+    });
+  }
+
+  async mergePull(
+    repo: string,
+    n: number,
+    style: MergeStyle,
+    opts: { deleteBranch?: boolean } = {}
+  ): Promise<string> {
     const Do =
       style === 'merge'
         ? 'merge'
@@ -579,7 +612,7 @@ export class GiteaForge implements Forge {
     await this.http.request(`${pullPath(repo, n)}/merge`, {
       pageParam: 'limit',
       method: 'POST',
-      body: { Do },
+      body: { Do, delete_branch_after_merge: opts.deleteBranch ?? false },
     });
     return `merged (${style})`;
   }
