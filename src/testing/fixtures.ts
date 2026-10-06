@@ -1,3 +1,5 @@
+import type { Config } from '../config';
+import type { ProseMode } from '../prose';
 import type { ForgeComment, ForgeIssue, ForgeMilestone } from '../providers/types';
 
 /**
@@ -35,5 +37,23 @@ export function makeMilestone(
     openIssues: 0,
     closedIssues: 0,
     ...input,
+  };
+}
+
+export const REPO = 'org/repo';
+
+/** Config de teste. Sobreposicao parcial, o resto tem valor util. */
+export function makeConfig(over: Partial<Config> = {}): Config {
+  return {
+    provider: 'gitea',
+    baseUrl: 'https://forge.test',
+    token: 'token-de-teste',
+    org: 'org',
+    defaultRepo: REPO,
+    login: 'ana',
+    defaultBranch: 'main',
+    promoteOrder: ['staging', 'production'],
+    prose: 'block' as ProseMode,
+    ...over,
   };
 }

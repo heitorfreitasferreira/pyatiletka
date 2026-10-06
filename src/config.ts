@@ -19,12 +19,37 @@ export type Config = {
   defaultRepo?: string;
   /** Login do filtro `mine`. */
   login?: string;
+  /** Branch usada quando o pedido nao informa. Vazio = o agente precisa dizer. */
+  defaultBranch?: string;
+  /**
+   * Ordem de promocao de `branch_promote`. Cada branch so sobe para as que
+   * vem depois dela nesta lista.
+   */
+  promoteOrder: string[];
   prose: ProseMode;
 };
 
 export class ConfigError extends Error {}
 
 const normUrl = (v: string) => v.trim().replace(/\/+$/, '');
+
+/** Ordem de promocao padrao: `staging` sobe para `production`. */
+export const DEFAULT_PROMOTE_ORDER = ['staging', 'production'];
+
+function readPromoteOrder(env: NodeJS.ProcessEnv): string[] {
+  const raw = env.FORGE_PROMOTE_ORDER?.trim();
+  if (!raw) return DEFAULT_PROMOTE_ORDER;
+  const order = raw
+    .split(',')
+    .map((b) => b.trim())
+    .filter(Boolean);
+  if (order.length < 2) {
+    throw new ConfigError(
+      `FORGE_PROMOTE_ORDER invalido: "${env.FORGE_PROMOTE_ORDER}". Use duas ou mais branches separadas por virgula.`
+    );
+  }
+  return order;
+}
 
 function readProse(env: NodeJS.ProcessEnv): ProseMode {
   const v = (env.FORGE_PROSE ?? 'block').trim().toLowerCase();
@@ -62,6 +87,8 @@ export function loadConfig(env: NodeJS.ProcessEnv, remoteProvider?: ProviderName
 
   const defaultRepo = env.FORGE_DEFAULT_REPO?.trim() || undefined;
   const org = env.FORGE_ORG?.trim() || defaultRepo?.split('/')[0] || undefined;
+  const defaultBranch = env.FORGE_DEFAULT_BRANCH?.trim() || undefined;
+  const promoteOrder = readPromoteOrder(env);
 
   if (provider === 'gitea') {
     const baseUrl = normUrl(env.GITEA_URL ?? '');
@@ -76,6 +103,8 @@ export function loadConfig(env: NodeJS.ProcessEnv, remoteProvider?: ProviderName
       org,
       defaultRepo,
       login: env.FORGE_LOGIN?.trim() || undefined,
+      defaultBranch,
+      promoteOrder,
       prose: readProse(env),
     };
   }
@@ -90,6 +119,8 @@ export function loadConfig(env: NodeJS.ProcessEnv, remoteProvider?: ProviderName
     org,
     defaultRepo,
     login: env.FORGE_LOGIN?.trim() || undefined,
+    defaultBranch,
+    promoteOrder,
     prose: readProse(env),
   };
 }

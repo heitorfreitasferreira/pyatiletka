@@ -3,10 +3,8 @@ import type { ToolContext } from '@opencode-ai/plugin';
 import { filterDiffByPath, fmtPR, pullTools, statusOf, tailLines } from './pulls';
 import type { Ctx } from '../core/context';
 import { FakeForge } from '../testing/fake-forge';
-import { makeComment } from '../testing/fixtures';
+import { makeComment, makeConfig, REPO } from '../testing/fixtures';
 import type { ForgePull } from '../providers/types';
-
-const REPO = 'org/repo';
 
 let forge: FakeForge;
 let tools: Record<string, { execute: (a: unknown, c: ToolContext) => Promise<unknown> }>;
@@ -26,16 +24,7 @@ const toolCtx = {
 function ctxFor(f: FakeForge, over: Partial<Ctx['config']> = {}): Ctx {
   return {
     forge: f,
-    config: {
-      provider: 'gitea',
-      baseUrl: 'https://gitea.test',
-      token: 'x',
-      org: 'org',
-      defaultRepo: REPO,
-      login: 'ana',
-      prose: 'block',
-      ...over,
-    },
+    config: makeConfig(over),
     remote: REPO,
     defaultRepo: REPO,
     notify: (message, variant = 'info') => void toasts.push({ message, variant }),

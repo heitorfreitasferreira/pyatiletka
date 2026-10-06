@@ -4,9 +4,8 @@ import { isRealPush, pipelineTools, pushedBranch } from './pipeline';
 import { createPushHook, pushedRepo } from './push-hook';
 import type { Ctx } from '../core/context';
 import { FakeForge } from '../testing/fake-forge';
+import { makeConfig, REPO } from '../testing/fixtures';
 import type { ForgeRun } from '../providers/types';
-
-const REPO = 'org/repo';
 
 let forge: FakeForge;
 let tools: Record<string, { execute: (a: unknown, c: ToolContext) => Promise<unknown> }>;
@@ -26,14 +25,7 @@ const toolCtx = {
 function ctxFor(f: FakeForge): Ctx {
   return {
     forge: f,
-    config: {
-      provider: 'gitea',
-      baseUrl: 'https://gitea.test',
-      token: 'x',
-      org: 'org',
-      defaultRepo: REPO,
-      prose: 'block',
-    },
+    config: makeConfig(),
     remote: REPO,
     defaultRepo: REPO,
     notify: (message, variant = 'info') => void toasts.push({ message, variant }),

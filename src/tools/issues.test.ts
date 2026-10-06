@@ -7,10 +7,8 @@ import { issueTools } from './issues';
 import { bindingFile, readBinding } from '../core/binding';
 import type { Ctx } from '../core/context';
 import { FakeForge } from '../testing/fake-forge';
-import { makeComment, makeIssue, makeMilestone } from '../testing/fixtures';
+import { makeComment, makeConfig, makeIssue, makeMilestone, REPO } from '../testing/fixtures';
 import type { ProseMode } from '../prose';
-
-const REPO = 'org/repo';
 const SESSION = 'ses_1';
 
 let dir: string;
@@ -22,14 +20,7 @@ const toasts: { message: string; variant: string }[] = [];
 function ctxFor(f: FakeForge, prose: ProseMode = 'block'): Ctx {
   return {
     forge: f,
-    config: {
-      provider: 'gitea',
-      baseUrl: 'https://gitea.test',
-      token: 'x',
-      org: 'org',
-      defaultRepo: REPO,
-      prose,
-    },
+    config: makeConfig({ prose }),
     remote: REPO,
     defaultRepo: REPO,
     notify: (message, variant = 'info') => void toasts.push({ message, variant }),
