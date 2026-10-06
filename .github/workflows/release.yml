@@ -29,7 +29,9 @@ jobs:
   dispatch-publish:
     needs: process
     runs-on: ubuntu-latest
-    if: needs.process.outputs.releases_created == 'true' || needs.process.outputs.prs_created == 'true'
+    # TODO(M6): reabilitar quando o pacote existir no npm e o Trusted
+    # Publishing estiver configurado. Sem isso o publish falha por ENEEDAUTH.
+    if: false
     steps:
       - name: Dispatch publish for releases
         if: needs.process.outputs.releases_created == 'true'
