@@ -204,7 +204,9 @@ export function branchTools({
         dry_run: tool.schema.boolean().optional().describe('So relata, nao faz push.'),
       },
       async execute(args) {
-        const repo = resolve(args.repo);
+        // A ordem e a checagem mais especifica e mais barata: resolver o repo
+        // primeiro esconderia o erro da branch quando o repo tambem nao esta
+        // configurado.
         const order = promoteOrder;
         const fromIdx = order.indexOf(args.from);
         if (fromIdx === -1) {
@@ -212,6 +214,7 @@ export function branchTools({
             `branch "${args.from}" nao esta na ordem de promocao (${order.join(' -> ')}). Ajuste FORGE_PROMOTE_ORDER se for outra.`
           );
         }
+        const repo = resolve(args.repo);
 
         const targets = args.to?.length ? args.to : order.slice(fromIdx + 1);
         if (!targets.length) return `${args.from} ja e a ultima branch da ordem; nada a promover.`;

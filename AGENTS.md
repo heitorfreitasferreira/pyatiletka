@@ -74,6 +74,20 @@
 
 ## Project Context
 
-- **Type**: ES Module package for Bun modules
+- **Type**: plugin para opencode (ES Module para Bun)
 - **Target**: Bun runtime, ES2021+
-- **Purpose**: General-purpose Bun module development
+- **Purpose**: fluxo de issues, marcos, PRs e CI para agentes, em Gitea e GitHub
+
+## Onde mexer
+
+- `src/providers/types.ts`: o contrato `Forge`. Toda tool fala so com esta
+  interface. O que diverge entre Gitea e GitHub fica em `src/providers/`.
+- `src/core/`: funcoes puras. `format`, `template`, `milestone`, `binding` e
+  `context` nao tocam rede nem disco, exceto `binding`.
+- `src/tools/`: as tools e o hook de push. Recebem um `Ctx` pronto.
+- `src/testing/`: `FakeForge` e fixtures. Nao entra no `dist`, porque
+  `src/index.ts` nao importa.
+
+Tool nova entra em um dos grupos existentes de `src/tools/` e vira item de
+`TOOL_NAMES` em `src/index.ts`. O teste `TOOL_NAMES > batem com o que
+createTools monta` falha se a lista e a montagem divergirem.

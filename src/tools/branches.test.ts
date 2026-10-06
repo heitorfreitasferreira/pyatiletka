@@ -213,6 +213,22 @@ describe('branch_promote', () => {
     expect(await runFail('branch_promote', { from: 'main' })).toContain('FORGE_PROMOTE_ORDER');
   });
 
+  it('branch fora da ordem e recusada antes de procurar o repo', async () => {
+    const semRepo: Ctx = {
+      forge,
+      config: makeConfig({ org: undefined }),
+      notify: () => {},
+    };
+    const t = branchTools({ ctx: semRepo, directory: '/nao-existe' });
+    try {
+      await t.branch_promote.execute({ from: 'nao-existe' }, toolCtx);
+      throw new Error('nao lancou');
+    } catch (e) {
+      // A mensagem tem de ser da branch, nao do repo ausente.
+      expect((e as Error).message).toContain('nao esta na ordem de promocao');
+    }
+  });
+
   it('ultima da ordem nao tem para onde subir', async () => {
     expect(await run('branch_promote', { from: 'production' })).toContain('nada a promover');
   });

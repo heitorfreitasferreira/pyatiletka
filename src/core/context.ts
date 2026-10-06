@@ -103,7 +103,7 @@ export function bindingOf(directory: string, sessionID: string): Binding | undef
   return readBinding(directory, sessionID);
 }
 
-/** Globs simples sobre uma lista. `infra-*` casa `infra-docs` e `infra-k3s`. */
+/** Globs simples sobre uma lista. `api-*` casa `api-core` e `api-web`. */
 export function matchGlob(value: string, pattern: string): boolean {
   const rx = new RegExp(
     `^${pattern

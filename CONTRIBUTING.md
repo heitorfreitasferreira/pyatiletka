@@ -1,41 +1,53 @@
-# Contributing
+# Contribuindo
 
-Thank you for your interest in contributing!
+Obrigado pelo interesse em contribuir.
 
-## Reporting Issues
+## Relatando problemas
 
-- Search existing issues before opening a new one
-- Include steps to reproduce, expected behavior, and actual behavior
-- For bugs, include your environment (Bun version, OS, etc.)
+- Procure problemas ja abertos antes de abrir um novo
+- Inclua passos para reproduzir, o que era esperado e o que aconteceu
+- Em bug, inclua o ambiente: versao do Bun, sistema operacional
 
-> **Note:** Issues inactive for 60 days may be marked stale and closed after 7 days. Feel free to reopen if still relevant.
+> **Nota:** problemas sem atividade ha 60 dias podem ser marcados como
+> obsoletos e fechados depois de 7 dias. Reabra se ainda fizer sentido.
 
-## Submitting Changes
+## Enviando mudancas
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feat/my-feature`)
-3. Make your changes
-4. Run tests and linting:
+1. Faça fork do repositorio
+2. Crie uma branch de feature (`git checkout -b feat/minha-feature`)
+3. Faça as mudancas
+4. Rode os testes e o lint:
    ```bash
    mise run test
    mise run lint
+   mise run typecheck
    ```
-5. Commit using [Conventional Commits](https://www.conventionalcommits.org/) format:
-   - `feat: add new feature`
-   - `fix: resolve bug`
-   - `docs: update readme`
-   - `chore: update dependencies`
-6. Push and open a Pull Request
+5. Commite no formato [Conventional Commits](https://www.conventionalcommits.org/):
+   - `feat: adiciona funcionalidade`
+   - `fix: corrige bug`
+   - `docs: atualiza o readme`
+   - `chore: atualiza dependencias`
+6. Push e abra um pull request
 
-## Pull Request Guidelines
+## Pull requests
 
-- PR titles must follow Conventional Commits format (enforced by CI)
-- Keep PRs focused on a single change
-- Include tests for new functionality
-- Ensure all checks pass before requesting review
+- O titulo do PR segue Conventional Commits, o que o CI exige
+- Um PR resolve uma coisa so
+- Funcionalidade nova vem com teste
+- Todos os checks passam antes do review
 
-## Code Style
+## Estilo de codigo
 
-This project uses ESLint and Prettier. Run `mise run lint:fix` to auto-fix issues.
+ESLint e Prettier. `bun x eslint . --ext .ts --fix` corrige o que da.
 
-See [AGENTS.md](./AGENTS.md) for detailed code style guidelines.
+As regras do repo estao em [AGENTS.md](./AGENTS.md).
+
+Antes de commitar:
+
+```
+mise run test && mise run lint && mise run typecheck
+```
+
+O contrato das tools esta em `src/providers/types.ts`. Tool nova fala so com a
+interface `Forge` e nunca com a API direto. O que diverge entre Gitea e GitHub
+fica no provider.

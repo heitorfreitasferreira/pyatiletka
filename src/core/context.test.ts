@@ -45,8 +45,8 @@ describe('parseRefs', () => {
 
 describe('matchGlob', () => {
   it('casa com * no meio e no fim', () => {
-    expect(matchGlob('infra-k3s', 'infra-*')).toBe(true);
-    expect(matchGlob('api', 'infra-*')).toBe(false);
+    expect(matchGlob('api-core', 'api-*')).toBe(true);
+    expect(matchGlob('docs', 'api-*')).toBe(false);
     expect(matchGlob('build-cache', '*cache')).toBe(true);
   });
 
