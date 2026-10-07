@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
+import { tool } from '@opencode-ai/plugin';
+import { toolSpecs, type ToolSpec } from './spec';
 import { DEFAULT_PROMOTE_ORDER as FALLBACK_ORDER } from '../config';
 import { pickRepo, type Ctx } from '../core/context';
 import type { Compare } from '../providers/types';
@@ -93,11 +94,11 @@ export function branchTools({
   ctx,
   directory,
   promoteOrder = FALLBACK_ORDER,
-}: BranchToolsInput): Record<string, ToolDefinition> {
+}: BranchToolsInput): ToolSpec[] {
   const repoArgHere = repoArg(ctx);
   const resolve = (arg?: string) => pickRepo(ctx, arg);
 
-  return {
+  return toolSpecs({
     branch_protections: tool({
       description:
         'Branches do repo e as regras que o servidor exige em cada uma (push liberado ou bloqueado, merge, aprovacoes obrigatorias). Use antes de mergear ou promover: isso vai ao servidor, nao ao git local.',
@@ -393,5 +394,5 @@ export function branchTools({
         ].join('\n');
       },
     }),
-  };
+  });
 }

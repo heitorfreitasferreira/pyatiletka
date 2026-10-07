@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { ToolContext } from '@opencode-ai/plugin';
 import { branchTools, compareVerdict } from './branches';
+import { toV1Tools } from '../adapters/v1';
 
 /** Assercao de substring, para as mensagens de recusa ficarem legiveis. */
 const contains = (haystack: string, needle: string) => expect(haystack).toContain(needle);
@@ -40,7 +41,7 @@ function ctxFor(f: FakeGitHost): Ctx {
 }
 
 const build = (f: FakeGitHost, order?: string[]) =>
-  branchTools({ ctx: ctxFor(f), directory: dir, promoteOrder: order });
+  toV1Tools(branchTools({ ctx: ctxFor(f), directory: dir, promoteOrder: order })) as never;
 
 async function run(name: string, args: unknown = {}): Promise<string> {
   const out = await tools[name].execute(args, toolCtx);
@@ -240,7 +241,7 @@ describe('branch_promote', () => {
       config: makeConfig({ org: undefined }),
       notify: () => {},
     };
-    const t = branchTools({ ctx: semRepo, directory: '/nao-existe' });
+    const t = toV1Tools(branchTools({ ctx: semRepo, directory: '/nao-existe' }));
     try {
       await t.branch_promote.execute({ from: 'nao-existe' }, toolCtx);
       throw new Error('nao lancou');

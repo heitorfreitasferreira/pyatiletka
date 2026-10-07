@@ -1,4 +1,5 @@
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
+import { tool } from '@opencode-ai/plugin';
+import { toolSpecs, type ToolSpec } from './spec';
 import { errorLines } from '../core/logs';
 import { branchOf, dur, fmtRun, isActive, runState } from '../core/format';
 import { expandRepos, parseRef, pickRepo, type Ctx } from '../core/context';
@@ -69,14 +70,11 @@ export function isRealPush(cmd: string): boolean {
   return !/--dry-run|--force|--force-with-lease|\s-f\s/.test(cmd);
 }
 
-export function pipelineTools({
-  ctx,
-  defaultBranch = '',
-}: PipelineToolsInput): Record<string, ToolDefinition> {
+export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): ToolSpec[] {
   const repoArgHere = repoArg(ctx);
   const resolve = (arg?: string) => pickRepo(ctx, arg);
 
-  return {
+  return toolSpecs({
     ci_runs: tool({
       description:
         'Lista execucoes do CI. Com `repo`, so aquele repo; com `repos` (lista ou glob), varios; sem nada, visao geral da org.',
@@ -382,7 +380,7 @@ export function pipelineTools({
         ].join('\n');
       },
     }),
-  };
+  });
 }
 
 export type { Run };

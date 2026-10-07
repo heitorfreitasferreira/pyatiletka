@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import type { ToolContext } from '@opencode-ai/plugin';
 import { isRealPush, pipelineTools, pushedBranch } from './pipeline';
+import { toV1Tools } from '../adapters/v1';
 import { createPushHook, pushedRepo } from './push-hook';
 import type { Ctx } from '../core/context';
 import { FakeGitHost } from '../testing/fake-git-host';
@@ -93,7 +94,7 @@ beforeEach(() => {
     ],
     repos: [REPO, 'org/outro'],
   });
-  tools = pipelineTools({ ctx: ctxFor(host) }) as never;
+  tools = toV1Tools(pipelineTools({ ctx: ctxFor(host) })) as never;
 });
 
 describe('pushedBranch', () => {

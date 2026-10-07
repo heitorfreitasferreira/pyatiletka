@@ -6,7 +6,10 @@
 
 set -e
 
-bun build ./src/index.ts --outdir dist --target bun
+# `@opencode/plugin` fica external: e dependency e o host resolve a copia
+# instalada, sem duplicar effect e @opencode/client no bundle. O
+# `@opencode-ai/plugin` (v1) segue empacotado para o v1 nao depender disso.
+bun build ./src/index.ts --outdir dist --target bun --external @opencode/plugin
 
 # Declaracoes para o `exports.types` do package.json. O bun nao emite .d.ts,
 # entao o tsc gera so as declaracoes em cima do mesmo codigo.

@@ -2,7 +2,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bindingFile, clearBinding, readBinding, writeBinding, type Binding } from './binding';
+import {
+  bindingFile,
+  clearBinding,
+  fileBinding,
+  readBinding,
+  storageBinding,
+  writeBinding,
+  type Binding,
+  type JsonStorage,
+} from './binding';
 
 let dir: string;
 
@@ -75,5 +84,51 @@ describe('clearBinding', () => {
     expect(clearBinding(dir, 'ses_1')).toBe(true);
     expect(readBinding(dir, 'ses_1')).toBeUndefined();
     expect(clearBinding(dir, 'ses_1')).toBe(false);
+  });
+});
+
+describe('fileBinding', () => {
+  it('espelha as funcoes de arquivo e devolve o caminho', async () => {
+    const store = fileBinding(dir);
+    const b: Binding = { repo: 'org/repo', issue: 1, boundAt: '2026-01-01T00:00:00Z' };
+    expect(await store.write('ses_1', b)).toBe(bindingFile(dir, 'ses_1'));
+    expect(await store.read('ses_1')).toEqual(b);
+    expect(await store.clear('ses_1')).toBe(true);
+    expect(await store.read('ses_1')).toBeUndefined();
+  });
+});
+
+describe('storageBinding', () => {
+  function mem(): JsonStorage & { map: Map<string, unknown> } {
+    const map = new Map<string, unknown>();
+    return {
+      map,
+      get: async (k) => map.get(k),
+      set: async (k, v) => void map.set(k, v),
+      remove: async (k) => void map.delete(k),
+    };
+  }
+
+  it('grava e le com o prefixo binding/', async () => {
+    const s = mem();
+    const store = storageBinding(s);
+    await store.write('ses_1', { repo: 'org/repo', issue: 9, boundAt: '2026-01-01T00:00:00Z' });
+    expect(s.map.has('binding/ses_1')).toBe(true);
+    expect((await store.read('ses_1'))?.issue).toBe(9);
+  });
+
+  it('nao devolve lixo como vinculo', async () => {
+    const s = mem();
+    const store = storageBinding(s);
+    await s.set('binding/ses_1', { nope: true });
+    expect(await store.read('ses_1')).toBeUndefined();
+  });
+
+  it('clear remove a chave', async () => {
+    const s = mem();
+    const store = storageBinding(s);
+    await store.write('ses_1', { repo: 'org/repo', boundAt: '2026-01-01T00:00:00Z' });
+    await store.clear('ses_1');
+    expect(await store.read('ses_1')).toBeUndefined();
   });
 });

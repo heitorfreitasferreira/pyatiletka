@@ -62,12 +62,14 @@ export function parseRefs(values?: string[]): number[] {
  */
 export function createCtx(input: {
   directory: string;
-  client: Client;
+  client?: Client;
   env?: NodeJS.ProcessEnv;
+  /** Opcoes do plugin no v2 (`ctx.options`). Sobrepõem o ambiente. */
+  options?: Record<string, unknown>;
 }): Ctx {
   const env = input.env ?? process.env;
   const remote = resolveRepo(input.directory);
-  const config = loadConfig(env, remote?.provider);
+  const config = loadConfig(env, remote?.provider, input.options);
   const host = createGitHost(config);
 
   const notify = (message: string, variant: NotifyVariant = 'info') => {

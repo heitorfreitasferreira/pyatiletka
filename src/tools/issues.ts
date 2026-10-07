@@ -1,7 +1,8 @@
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
+import { tool } from '@opencode-ai/plugin';
+import { toolSpecs, type ToolSpec } from './spec';
 import { assertProse } from '../prose';
-import { bindingOf, expandRepos, parseRef, parseRefs, pickRepo, type Ctx } from '../core/context';
-import { clearBinding, writeBinding } from '../core/binding';
+import { expandRepos, parseRef, parseRefs, pickRepo, type Ctx } from '../core/context';
+import { fileBinding, type BindingStore } from '../core/binding';
 import { classify, dateField, fmtComment, fmtIssue, priorityOf } from '../core/format';
 import { findMilestone, inMilestone, milestoneQueue, type Deps } from '../core/milestone';
 import { buildBody, listTemplates, loadTemplate } from '../core/template';
@@ -15,6 +16,8 @@ import type { Issue, Milestone } from '../providers/types';
 export type IssueToolsInput = {
   ctx: Ctx;
   directory: string;
+  /** Store do vinculo. Sem ele, arquivo em `<directory>/.opencode/.state`. */
+  binding?: BindingStore;
 };
 
 const repoArg = (ctx: Ctx) =>
@@ -30,13 +33,13 @@ const repoArg = (ctx: Ctx) =>
 const issueArg = tool.schema.string().describe("Numero da issue (ex.: '77')");
 
 /** Issue da tool ou da issue vinculada a sessao. */
-function target(
+async function target(
   ctx: Ctx,
-  directory: string,
+  store: BindingStore,
   args: { repo?: string; issue?: string },
   sessionID: string
-): { repo: string; n: number } {
-  const binding = bindingOf(directory, sessionID);
+): Promise<{ repo: string; n: number }> {
+  const binding = await store.read(sessionID);
   const repo = pickRepo(ctx, args.repo, binding);
   const n = parseRef(args.issue ?? binding?.issue);
   if (!Number.isFinite(n)) {
@@ -66,11 +69,12 @@ async function milestoneDeps(ctx: Ctx, repo: string, items: Issue[]): Promise<De
   return { inside, outside };
 }
 
-export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, ToolDefinition> {
+export function issueTools({ ctx, directory, binding }: IssueToolsInput): ToolSpec[] {
   const repoArgHere = repoArg(ctx);
   const resolve = (arg?: string) => pickRepo(ctx, arg);
+  const store = binding ?? fileBinding(directory);
 
-  return {
+  return toolSpecs({
     issue_bind: tool({
       description:
         'Vincula ESTA sessao a uma issue. Toda conversa passa a receber o corpo e os comentarios da issue automaticamente. Chame sempre que comecar ou continuar trabalho.',
@@ -88,14 +92,15 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         if (!Number.isFinite(n)) throw new Error(`issue invalida: ${args.issue}`);
         const issue = await ctx.host.getIssue(repo, n);
         const milestone = args.milestone ?? issue.milestone?.title;
-        const file = writeBinding(directory, toolCtx.sessionID, {
+        const file = await store.write(toolCtx.sessionID, {
           repo,
           issue: n,
           milestone,
           boundAt: new Date().toISOString(),
         });
         ctx.notify(`Vinculado: ${repo}#${n} - ${issue.title}`);
-        return `Vinculado a ${repo}#${n} (arquivo: ${file})\n\n${fmtIssue(issue)}`;
+        const where = file ? ` (arquivo: ${file})` : '';
+        return `Vinculado a ${repo}#${n}${where}\n\n${fmtIssue(issue)}`;
       },
     }),
 
@@ -103,9 +108,9 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
       description: 'Desvincula a sessao da issue atual.',
       args: {},
       async execute(_args, toolCtx) {
-        const b = bindingOf(directory, toolCtx.sessionID);
+        const b = await store.read(toolCtx.sessionID);
         if (!b) return 'Sessao ja estava desvinculada.';
-        clearBinding(directory, toolCtx.sessionID);
+        await store.clear(toolCtx.sessionID);
         ctx.notify('Sessao desvinculada');
         return `Sessao desvinculada (estava em ${b.repo}#${b.issue ?? '-'}).`;
       },
@@ -115,7 +120,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
       description: 'Mostra a qual issue esta sessao esta vinculada, ou diz que nao ha vinculo.',
       args: {},
       async execute(_args, toolCtx) {
-        const b = bindingOf(directory, toolCtx.sessionID);
+        const b = await store.read(toolCtx.sessionID);
         if (!b) return 'Nenhuma issue vinculada nesta sessao.';
         const issue = b.issue
           ? await ctx.host.getIssue(b.repo, b.issue).catch(() => undefined)
@@ -143,7 +148,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
           ),
       },
       async execute(args, toolCtx) {
-        const { repo, n } = target(ctx, directory, args, toolCtx.sessionID);
+        const { repo, n } = await target(ctx, store, args, toolCtx.sessionID);
         const issue = await ctx.host.getIssue(repo, n);
         const out = [fmtIssue(issue)];
 
@@ -412,7 +417,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         repo: repoArgHere,
       },
       async execute(args, toolCtx) {
-        const { repo, n } = target(ctx, directory, args, toolCtx.sessionID);
+        const { repo, n } = await target(ctx, store, args, toolCtx.sessionID);
         const add = parseRefs(args.add);
         const rm = parseRefs(args.remove);
         if (!add.length && !rm.length) throw new Error('informe `add` e/ou `remove`.');
@@ -447,7 +452,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         repo: repoArgHere,
       },
       async execute(args, toolCtx) {
-        const { repo, n } = target(ctx, directory, args, toolCtx.sessionID);
+        const { repo, n } = await target(ctx, store, args, toolCtx.sessionID);
         const warn = assertProse(args.body, 'comentario da issue', ctx.config.prose);
         await ctx.host.createComment(repo, n, args.body);
         return [`Comentario publicado em ${repo}#${n}.`, warn].filter(Boolean).join('\n');
@@ -466,7 +471,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         body: tool.schema.string().optional().describe('Novo corpo da issue (substitui o atual).'),
       },
       async execute(args, toolCtx) {
-        const { repo, n } = target(ctx, directory, args, toolCtx.sessionID);
+        const { repo, n } = await target(ctx, store, args, toolCtx.sessionID);
         const warn = assertProse(args.body, 'corpo da issue', ctx.config.prose);
 
         const patch: { title?: string; body?: string; labels?: string[] } = {};
@@ -510,7 +515,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
           .describe('Motivo do fechamento (default: completed).'),
       },
       async execute(args, toolCtx) {
-        const { repo, n } = target(ctx, directory, args, toolCtx.sessionID);
+        const { repo, n } = await target(ctx, store, args, toolCtx.sessionID);
         const warn = assertProse(args.comment, 'comentario de fechamento', ctx.config.prose);
         if (args.comment) await ctx.host.createComment(repo, n, args.comment);
         await ctx.host.updateIssue(repo, n, {
@@ -526,7 +531,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
       description: 'Reabre uma issue.',
       args: { issue: tool.schema.string().optional(), repo: repoArgHere },
       async execute(args, toolCtx) {
-        const { repo, n } = target(ctx, directory, args, toolCtx.sessionID);
+        const { repo, n } = await target(ctx, store, args, toolCtx.sessionID);
         await ctx.host.updateIssue(repo, n, { state: 'open' });
         return `${repo}#${n} reaberta.`;
       },
@@ -649,5 +654,5 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
           .join('\n');
       },
     }),
-  };
+  });
 }

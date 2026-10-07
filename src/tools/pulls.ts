@@ -1,4 +1,5 @@
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
+import { tool } from '@opencode-ai/plugin';
+import { toolSpecs, type ToolSpec } from './spec';
 import { assertProse } from '../prose';
 import { expandRepos, parseRef, pickRepo, type Ctx } from '../core/context';
 import { fmtComment, fmtReview, fmtReviewComment } from '../core/format';
@@ -93,7 +94,7 @@ function compile(pattern: string, field: string): RegExp {
   }
 }
 
-export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinition> {
+export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
   const repoArgHere = repoArg(ctx);
   const resolve = (arg?: string) => pickRepo(ctx, arg);
 
@@ -106,7 +107,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
   const checksOf = (repo: string, pr: Pull) =>
     ctx.host.getChecks(repo, pr.headSha ?? '').catch(() => undefined);
 
-  return {
+  return toolSpecs({
     pr_list: tool({
       description:
         'Lista PRs de um repo com o estado de CI de cada um, montado a partir do status do head SHA (nao precisa de uma chamada por PR). Sem `repo`, varre a org inteira.',
@@ -493,7 +494,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
         ].join('\n');
       },
     }),
-  };
+  });
 }
 
 export type { MergeStyle };

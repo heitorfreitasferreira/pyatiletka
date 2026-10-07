@@ -94,3 +94,34 @@ describe('PYATILETKA_DEFAULT_BRANCH', () => {
     expect(loadConfig({ GITHUB_TOKEN: 'x' }).defaultBranch).toBeUndefined();
   });
 });
+
+describe('opcoes do plugin (v2)', () => {
+  it('options sobrepoem o ambiente', () => {
+    const c = loadConfig(
+      { ...github, PYATILETKA_ORG: 'env-org', PYATILETKA_PROSE: 'block' },
+      undefined,
+      { org: 'opt-org', prose: 'warn' }
+    );
+    expect(c.org).toBe('opt-org');
+    expect(c.prose).toBe('warn');
+  });
+
+  it('promoteOrder em lista vira a ordem de promocao', () => {
+    const c = loadConfig({ ...github }, undefined, { promoteOrder: ['dev', 'hom', 'prod'] });
+    expect(c.promoteOrder).toEqual(['dev', 'hom', 'prod']);
+  });
+
+  it('provider por options vence o ambiente', () => {
+    const c = loadConfig(
+      { GITEA_URL: 'https://x', GITEA_TOKEN: 't', GITHUB_TOKEN: 'g' },
+      undefined,
+      { provider: 'github' }
+    );
+    expect(c.provider).toBe('github');
+  });
+
+  it('options vazias nao mudam nada', () => {
+    const c = loadConfig({ ...github, PYATILETKA_ORG: 'env-org' }, undefined, {});
+    expect(c.org).toBe('env-org');
+  });
+});

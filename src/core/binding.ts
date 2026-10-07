@@ -49,3 +49,51 @@ export function clearBinding(directory: string, sessionID: string): boolean {
   rmSync(f);
   return true;
 }
+
+/**
+ * Onde o vinculo da sessao mora. O v1 usa arquivo (default, abaixo), o v2 usa
+ * `ctx.storage`. As tools falam so com esta interface.
+ */
+export type BindingStore = {
+  read(sessionID: string): Binding | undefined | Promise<Binding | undefined>;
+  /** Devolve o caminho quando existe um (store de arquivo), senao undefined. */
+  write(sessionID: string, b: Binding): string | undefined | Promise<string | undefined>;
+  clear(sessionID: string): boolean | undefined | Promise<boolean | undefined>;
+};
+
+export function fileBinding(directory: string): BindingStore {
+  return {
+    read: (sessionID) => readBinding(directory, sessionID),
+    write: (sessionID, b) => writeBinding(directory, sessionID, b),
+    clear: (sessionID) => clearBinding(directory, sessionID),
+  };
+}
+
+/** Store minimo de JSON, para nao acoplar o core ao tipo do plugin. */
+export type JsonStorage = {
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown): Promise<void>;
+  remove(key: string): Promise<void>;
+};
+
+export function storageBinding(storage: JsonStorage): BindingStore {
+  const key = (sessionID: string) => `binding/${sessionID}`;
+  return {
+    read: async (sessionID) => {
+      const v = await storage.get(key(sessionID));
+      return isBinding(v) ? v : undefined;
+    },
+    write: async (sessionID, b) => {
+      await storage.set(key(sessionID), b);
+      return undefined;
+    },
+    clear: async (sessionID) => {
+      await storage.remove(key(sessionID));
+      return true;
+    },
+  };
+}
+
+function isBinding(v: unknown): v is Binding {
+  return typeof (v as Binding | null)?.repo === 'string';
+}

@@ -81,9 +81,11 @@ async function loadPlugin(over: Record<string, string> = {}) {
 }
 
 describe('PyatiletkaPlugin', () => {
-  it('exporta a mesma coisa por nome e por default', async () => {
+  it('default export serve v1 (server) e v2 (setup)', async () => {
     const mod = await import('./index');
-    expect(mod.default).toBe(mod.PyatiletkaPlugin);
+    expect(mod.default.server).toBe(mod.PyatiletkaPlugin);
+    expect(typeof mod.default.setup).toBe('function');
+    expect(mod.default.id).toBe('pyatiletka');
   });
 
   it('devolve as tools e os tres hooks', async () => {

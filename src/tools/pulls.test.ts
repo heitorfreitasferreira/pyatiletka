@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import type { ToolContext } from '@opencode-ai/plugin';
 import { filterDiffByPath, fmtPR, pullTools, statusOf, tailLines } from './pulls';
+import { toV1Tools } from '../adapters/v1';
 import type { Ctx } from '../core/context';
 import { FakeGitHost } from '../testing/fake-git-host';
 import { makeComment, makeConfig, REPO } from '../testing/fixtures';
@@ -131,7 +132,7 @@ beforeEach(() => {
     },
     repos: [REPO, 'org/outro'],
   });
-  tools = pullTools({ ctx: ctxFor(host) }) as never;
+  tools = toV1Tools(pullTools({ ctx: ctxFor(host) })) as never;
 });
 
 describe('statusOf', () => {
@@ -198,7 +199,7 @@ describe('pr_list', () => {
   });
 
   it('mine sem PYATILETKA_LOGIN explica o que falta', async () => {
-    tools = pullTools({ ctx: ctxFor(host, { login: undefined }) }) as never;
+    tools = toV1Tools(pullTools({ ctx: ctxFor(host, { login: undefined }) })) as never;
     expect(await runFail('pr_list', { mine: true })).toContain('PYATILETKA_LOGIN');
   });
 

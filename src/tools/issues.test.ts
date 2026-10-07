@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ToolContext } from '@opencode-ai/plugin';
 import { issueTools } from './issues';
+import { toV1Tools } from '../adapters/v1';
 import { bindingFile, readBinding } from '../core/binding';
 import type { Ctx } from '../core/context';
 import { FakeGitHost } from '../testing/fake-git-host';
@@ -82,7 +83,7 @@ beforeEach(() => {
     deps: { 3: [1] },
     milestones: [makeMilestone({ id: 13, title: 'Entrega', openIssues: 2, closedIssues: 1 })],
   });
-  tools = issueTools({ ctx: ctxFor(host), directory: dir }) as never;
+  tools = toV1Tools(issueTools({ ctx: ctxFor(host), directory: dir })) as never;
 });
 
 afterEach(() => {
@@ -316,7 +317,7 @@ describe('issue_create', () => {
   });
 
   it('prosa em warn devolve o aviso e grava', async () => {
-    tools = issueTools({ ctx: ctxFor(host, 'warn'), directory: dir }) as never;
+    tools = toV1Tools(issueTools({ ctx: ctxFor(host, 'warn'), directory: dir })) as never;
     const out = await run('issue_create', { title: 'x', body: 'faz o servidor — rapido' });
     expect(out).toContain('unsloppify');
     expect(host.called('createIssue')).toHaveLength(1);

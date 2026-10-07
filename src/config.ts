@@ -80,7 +80,37 @@ export function resolveProvider(
   return undefined;
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv, remoteProvider?: ProviderName): Config {
+/**
+ * Opcoes do `plugins` do opencode.json, no formato das variaveis de ambiente
+ * que o resto do config ja le. Options sobrepoem o ambiente.
+ */
+function optionsToEnv(options?: Record<string, unknown>): NodeJS.ProcessEnv {
+  if (!options) return {};
+  const out: NodeJS.ProcessEnv = {};
+  const str = (key: string, env: string) => {
+    const v = options[key];
+    if (typeof v === 'string' && v.trim()) out[env] = v;
+  };
+  const arr = (key: string, env: string) => {
+    const v = options[key];
+    if (Array.isArray(v) && v.length) out[env] = v.map(String).join(',');
+  };
+  str('provider', 'PYATILETKA_PROVIDER');
+  str('org', 'PYATILETKA_ORG');
+  str('defaultRepo', 'PYATILETKA_DEFAULT_REPO');
+  str('defaultBranch', 'PYATILETKA_DEFAULT_BRANCH');
+  str('login', 'PYATILETKA_LOGIN');
+  str('prose', 'PYATILETKA_PROSE');
+  arr('promoteOrder', 'PYATILETKA_PROMOTE_ORDER');
+  return out;
+}
+
+export function loadConfig(
+  env: NodeJS.ProcessEnv,
+  remoteProvider?: ProviderName,
+  options?: Record<string, unknown>
+): Config {
+  env = { ...env, ...optionsToEnv(options) };
   const provider = resolveProvider(env, remoteProvider);
   if (!provider) {
     throw new ConfigError(

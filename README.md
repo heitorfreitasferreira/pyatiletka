@@ -12,7 +12,18 @@ CI, runners e protecao de branch.
 
 ## Instalacao
 
-No `opencode.json`:
+O default export carrega os dois entrypoints: o v2 chama `setup`, o v1 chama
+`server` (entrypoint objeto, opencode a partir de 1.18.29).
+
+No `opencode.json` do v2 (campo `plugins`):
+
+```json
+{
+  "plugins": ["pyatiletka"]
+}
+```
+
+No v1 (campo `plugin`):
 
 ```json
 {
@@ -20,11 +31,11 @@ No `opencode.json`:
 }
 ```
 
-Com opcoes:
+No v2 o plugin aceita opcoes, lidas como `ctx.options`:
 
 ```json
 {
-  "plugin": [["pyatiletka", {}]]
+  "plugins": [{ "package": "pyatiletka", "options": { "org": "minha-org" } }]
 }
 ```
 
@@ -54,7 +65,10 @@ Provider: `PYATILETKA_PROVIDER` manda. Sem ele, o remote do clone decide, e por
 ultimo o ambiente (`GITEA_URL` presente, senao `GITHUB_TOKEN`).
 
 O plugin le o ambiente do processo do opencode, entao a variavel precisa estar
-exportada no shell que launched opencode. O `opencode.json` nao tem campo `env`.
+exportada no shell que launched opencode. No v2, as chaves nao sensiveis tambem
+podem vir de `options` no `opencode.json` (`provider`, `org`, `defaultRepo`,
+`defaultBranch`, `login`, `promoteOrder`, `prose`), que sobrepoe o ambiente.
+Token continua so no ambiente.
 
 Exemplo minimo no shell:
 
@@ -259,6 +273,11 @@ CI terminar e devolve o veredito no mesmo turno, com as linhas de erro quando
 falha. Push de teste (`--dry-run`) e com force ficam de fora, e repo sem
 workflow configurado nao espera nada.
 
+No v1 os hooks sao `experimental.chat.system.transform`,
+`experimental.session.compacting` e `tool.execute.after`. No v2 equivalem a
+`ctx.session.hook("context")`, `ctx.session.hook("compaction")` e
+`ctx.tool.hook("execute.after")`.
+
 ## Como o repo e resolvido
 
 1. o argumento `repo` da tool
@@ -269,11 +288,15 @@ workflow configurado nao espera nada.
 Aceita `repo`, `owner/repo` e `repo` prefixado com `PYATILETKA_ORG`. `repos` com
 lista ou glob (`api-*`) varre varios repos em uma chamada.
 
-## Estado em disco
+## Estado e notificacao
 
-O vinculo de sessao fica em
+No v1 o vinculo de sessao fica em
 `<worktree>/.opencode/.state/issue-sessions/<sessionID>.json`, dentro do que o
-opencode ja ignora. Nao ha outro estado local.
+opencode ja ignora. No v2 o mesmo vinculo vai para o `ctx.storage` do plugin. Nao
+ha outro estado local.
+
+No v2 o `notify` e no-op: toast passou a ser coisa de plugin de CLI no opencode
+v2, e este pacote registra so o plugin de servidor.
 
 ## Desenvolvimento
 

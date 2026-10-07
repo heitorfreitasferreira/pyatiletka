@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+* suporte a opencode v1 e v2 no mesmo pacote, com o v2 registrando as tools por namespace
+* opcoes do plugin no v2 via `plugins` do `opencode.json`, sobrepondo o ambiente
+* vinculo de sessao no storage do v2, mantendo o arquivo no v1
+
+### Code Refactoring
+
+* tools em uma spec neutra, consumida por um adaptador v1 e um adaptador v2
+
+### Build System
+
+* `@opencode/plugin` entra como dependencia e fica external no bundle
+
 ## 1.0.0 (2026-10-07)
 
 
