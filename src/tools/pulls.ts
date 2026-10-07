@@ -2,7 +2,7 @@ import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import { assertProse } from '../prose';
 import { expandRepos, parseRef, pickRepo, type Ctx } from '../core/context';
 import { fmtComment, fmtReview, fmtReviewComment } from '../core/format';
-import type { ForgeChecks, ForgePull, MergeStyle } from '../providers/types';
+import type { Checks, Pull, MergeStyle } from '../providers/types';
 
 /**
  * Tools de pull request. `pr_merge` tem porta de CI verde e recusa por padrao:
@@ -31,7 +31,7 @@ const GREEN = new Set(['success']);
  * Estado de CI do head. Sem check nenhum, o PR e liberado: `ok` e verdadeiro
  * porque nao ha o que esperar.
  */
-export function statusOf(checks?: ForgeChecks) {
+export function statusOf(checks?: Checks) {
   const statuses = checks?.statuses ?? [];
   const failed = statuses.filter((s) => s.status === 'failure' || s.status === 'error');
   const pending = statuses.filter((s) => s.status === 'pending');
@@ -45,7 +45,7 @@ export function statusOf(checks?: ForgeChecks) {
   };
 }
 
-export function fmtPR(pr: ForgePull, checks?: ForgeChecks): string {
+export function fmtPR(pr: Pull, checks?: Checks): string {
   const { overall, ok } = statusOf(checks);
   const flags = [
     pr.draft ? 'draft' : '',
@@ -97,14 +97,14 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
   const repoArgHere = repoArg(ctx);
   const resolve = (arg?: string) => pickRepo(ctx, arg);
 
-  const pull = async (repo: string, ref: string | number): Promise<ForgePull> => {
+  const pull = async (repo: string, ref: string | number): Promise<Pull> => {
     const n = parseRef(ref);
     if (!Number.isFinite(n)) throw new Error(`PR invalido: ${ref}`);
-    return ctx.forge.getPull(repo, n);
+    return ctx.host.getPull(repo, n);
   };
 
-  const checksOf = (repo: string, pr: ForgePull) =>
-    ctx.forge.getChecks(repo, pr.headSha ?? '').catch(() => undefined);
+  const checksOf = (repo: string, pr: Pull) =>
+    ctx.host.getChecks(repo, pr.headSha ?? '').catch(() => undefined);
 
   return {
     pr_list: tool({
@@ -131,7 +131,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
         const login = ctx.config.login?.toLowerCase();
 
         const one = async (repo: string) => {
-          let list = await ctx.forge.listPulls(repo, {
+          let list = await ctx.host.listPulls(repo, {
             state,
             base: args.base,
             head: args.head,
@@ -158,7 +158,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
         const blocks: string[] = [];
         let total = 0;
         for (const repo of repos) {
-          const { list } = await one(repo).catch(() => ({ repo, list: [] as ForgePull[] }));
+          const { list } = await one(repo).catch(() => ({ repo, list: [] as Pull[] }));
           if (!list.length) continue;
           total += list.length;
           const lines: string[] = [];
@@ -219,10 +219,10 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
 
         // Reviews primeiro: `comments` conta review junto com a conversa, entao
         // a guarda de corte precisa descontar os reviews antes de comparar.
-        const reviews = await ctx.forge.listReviews(repo, pr.number).catch(() => []);
+        const reviews = await ctx.host.listReviews(repo, pr.number).catch(() => []);
 
         if (args.comments !== 0) {
-          const all = await ctx.forge.listComments(repo, pr.number).catch(() => []);
+          const all = await ctx.host.listComments(repo, pr.number).catch(() => []);
           const shown = args.comments && args.comments > 0 ? all.slice(-args.comments) : all;
           const expected = Math.max(0, (pr.comments ?? 0) - reviews.length);
           lines.push('', `--- comentarios (${all.length}) ---`);
@@ -240,7 +240,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
           for (const r of reviews) {
             lines.push('', fmtReview(r), (r.body ?? '').trim() || '(sem corpo)');
             if ((r.commentsCount ?? 0) > 0) {
-              const inline = await ctx.forge
+              const inline = await ctx.host
                 .listReviewComments(repo, pr.number, r.id)
                 .catch(() => []);
               for (const c of inline) lines.push(fmtReviewComment(c));
@@ -285,7 +285,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
       async execute(args) {
         const repo = resolve(args.repo);
         const n = parseRef(args.pr);
-        const files = await ctx.forge.getPullFiles(repo, n);
+        const files = await ctx.host.getPullFiles(repo, n);
         if (!files.length) return `${repo}#${n}: nenhum arquivo (PR vazio ou sem diff).`;
         const add = files.reduce((a, f) => a + f.additions, 0);
         const del = files.reduce((a, f) => a + f.deletions, 0);
@@ -312,7 +312,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
       async execute(args) {
         const repo = resolve(args.repo);
         const n = parseRef(args.pr);
-        let diff = await ctx.forge.getPullDiff(repo, n);
+        let diff = await ctx.host.getPullDiff(repo, n);
         if (!diff.trim())
           return `${repo}#${n}: diff vazio (PR sem mudanca ou ainda nao calculada).`;
         if (args.path) diff = filterDiffByPath(diff, args.path);
@@ -335,7 +335,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
       async execute(args) {
         const warn = assertProse(args.body, 'descricao do PR', ctx.config.prose);
         const repo = resolve(args.repo);
-        const created = await ctx.forge.createPull(repo, {
+        const created = await ctx.host.createPull(repo, {
           head: args.head,
           base: args.base,
           title: args.title,
@@ -406,7 +406,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
         }
 
         const style = args.style ?? 'fast-forward-only';
-        const result = await ctx.forge.mergePull(repo, n, style, {
+        const result = await ctx.host.mergePull(repo, n, style, {
           deleteBranch: args.delete_branch ?? false,
         });
         const after = await pull(repo, n);
@@ -434,7 +434,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
         const warn = assertProse(args.body, 'comentario do PR', ctx.config.prose);
         const repo = resolve(args.repo);
         const n = parseRef(args.pr);
-        await ctx.forge.createComment(repo, n, args.body);
+        await ctx.host.createComment(repo, n, args.body);
         return [`Comentario publicado em ${repo}#${n}.`, warn].filter(Boolean).join('\n');
       },
     }),
@@ -466,7 +466,7 @@ export function pullTools({ ctx }: PullToolsInput): Record<string, ToolDefinitio
           try {
             const found = args.pr
               ? [await pull(repo, args.pr)]
-              : (await ctx.forge.listPulls(repo, { state, limit: 50 })).filter(
+              : (await ctx.host.listPulls(repo, { state, limit: 50 })).filter(
                   (p) => p.headRef === args.branch
                 );
             const pr = found[0];

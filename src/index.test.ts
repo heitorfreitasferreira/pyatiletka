@@ -6,12 +6,12 @@ import type { Hooks } from '@opencode-ai/plugin';
 import { createHooks, createTools, PyatiletkaPlugin, TOOL_NAMES } from './index';
 import { readBinding, writeBinding } from './core/binding';
 import type { Ctx } from './core/context';
-import { FakeForge } from './testing/fake-forge';
+import { FakeGitHost } from './testing/fake-git-host';
 import { makeComment, makeConfig, makeIssue, REPO } from './testing/fixtures';
 
-function ctxFor(f: FakeForge): Ctx {
+function ctxFor(f: FakeGitHost): Ctx {
   return {
-    forge: f,
+    host: f,
     config: makeConfig(),
     remote: REPO,
     defaultRepo: REPO,
@@ -25,12 +25,12 @@ describe('TOOL_NAMES', () => {
   });
 
   it('batem com o que createTools monta', () => {
-    const tools = createTools(ctxFor(new FakeForge()), '/w');
+    const tools = createTools(ctxFor(new FakeGitHost()), '/w');
     expect(Object.keys(tools).sort()).toEqual([...TOOL_NAMES].sort());
   });
 
   it('cada tool tem descricao e execute', () => {
-    const tools = createTools(ctxFor(new FakeForge()), '/w');
+    const tools = createTools(ctxFor(new FakeGitHost()), '/w');
     for (const [name, t] of Object.entries(tools)) {
       expect(typeof t.description, name).toBe('string');
       expect(typeof t.execute, name).toBe('function');
@@ -111,14 +111,14 @@ describe('PyatiletkaPlugin', () => {
 
 describe('hooks de contexto', () => {
   let dir: string;
-  let forge: FakeForge;
+  let host: FakeGitHost;
   let hooks: Hooks;
 
-  const load = () => void (hooks = createHooks(ctxFor(forge), dir));
+  const load = () => void (hooks = createHooks(ctxFor(host), dir));
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'pyatiletka-index-'));
-    forge = new FakeForge({
+    host = new FakeGitHost({
       issues: [
         makeIssue({
           number: 7,
@@ -173,7 +173,7 @@ describe('hooks de contexto', () => {
   it('falha ao ler a issue vira aviso, nao turno quebrado', async () => {
     writeBinding(dir, 'ses_1', { repo: REPO, issue: 7, boundAt: 'x' });
     load();
-    forge.fail.set('getIssue', new Error('500 do servidor'));
+    host.fail.set('getIssue', new Error('500 do servidor'));
     const output = { system: [] as string[] };
     await hooks['experimental.chat.system.transform']?.(
       { sessionID: 'ses_1', model: {} as never },
@@ -185,7 +185,7 @@ describe('hooks de contexto', () => {
   it('avisa quando a API corta comentarios', async () => {
     writeBinding(dir, 'ses_1', { repo: REPO, issue: 7, boundAt: 'x' });
     load();
-    forge.state.comments[7] = [makeComment({ id: 1, body: 'so este' })];
+    host.state.comments[7] = [makeComment({ id: 1, body: 'so este' })];
     const output = { system: [] as string[] };
     await hooks['experimental.chat.system.transform']?.(
       { sessionID: 'ses_1', model: {} as never },

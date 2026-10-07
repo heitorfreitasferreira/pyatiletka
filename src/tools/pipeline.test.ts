@@ -3,11 +3,11 @@ import type { ToolContext } from '@opencode-ai/plugin';
 import { isRealPush, pipelineTools, pushedBranch } from './pipeline';
 import { createPushHook, pushedRepo } from './push-hook';
 import type { Ctx } from '../core/context';
-import { FakeForge } from '../testing/fake-forge';
+import { FakeGitHost } from '../testing/fake-git-host';
 import { makeConfig, REPO } from '../testing/fixtures';
-import type { ForgeRun } from '../providers/types';
+import type { Run } from '../providers/types';
 
-let forge: FakeForge;
+let host: FakeGitHost;
 let tools: Record<string, { execute: (a: unknown, c: ToolContext) => Promise<unknown> }>;
 const toasts: { message: string; variant: string }[] = [];
 
@@ -22,9 +22,9 @@ const toolCtx = {
   ask: async () => {},
 } as unknown as ToolContext;
 
-function ctxFor(f: FakeForge): Ctx {
+function ctxFor(f: FakeGitHost): Ctx {
   return {
-    forge: f,
+    host: f,
     config: makeConfig(),
     remote: REPO,
     defaultRepo: REPO,
@@ -47,7 +47,7 @@ async function runFail(name: string, args: unknown = {}): Promise<string> {
   throw new Error(`${name} nao lancou erro`);
 }
 
-const run1 = (over: Partial<ForgeRun> = {}): ForgeRun => ({
+const run1 = (over: Partial<Run> = {}): Run => ({
   id: 100,
   status: 'completed',
   conclusion: 'success',
@@ -65,7 +65,7 @@ const run1 = (over: Partial<ForgeRun> = {}): ForgeRun => ({
 
 beforeEach(() => {
   toasts.length = 0;
-  forge = new FakeForge({
+  host = new FakeGitHost({
     runs: [
       run1(),
       run1({
@@ -93,7 +93,7 @@ beforeEach(() => {
     ],
     repos: [REPO, 'org/outro'],
   });
-  tools = pipelineTools({ ctx: ctxFor(forge) }) as never;
+  tools = pipelineTools({ ctx: ctxFor(host) }) as never;
 });
 
 describe('pushedBranch', () => {
@@ -147,7 +147,7 @@ describe('ci_runs', () => {
     expect(await run('ci_runs', { branch: 'feat/x' })).toContain('#99');
     expect(await run('ci_runs', { event: 'push' })).toContain('#100');
     expect(await run('ci_runs', { active: true })).toContain('Nenhuma execucao em org/repo');
-    forge.state.runs = [run1({ id: 98, status: 'in_progress', conclusion: null })];
+    host.state.runs = [run1({ id: 98, status: 'in_progress', conclusion: null })];
     expect(await run('ci_runs', { active: true })).toContain('in_progress');
   });
 
@@ -156,7 +156,7 @@ describe('ci_runs', () => {
   });
 
   it('repo sem execucao diz isso', async () => {
-    forge.state.runs = [];
+    host.state.runs = [];
     expect(await run('ci_runs')).toContain('Nenhuma execucao em org/repo');
   });
 });
@@ -170,7 +170,7 @@ describe('ci_run', () => {
   });
 
   it('acrescenta o CI do commit', async () => {
-    forge.state.checks = {
+    host.state.checks = {
       aaaa1111: { overall: 'success', statuses: [{ context: 'lint', status: 'success' }] },
     };
     expect(await run('ci_run', { run: '100' })).toContain('CI do commit: success');
@@ -205,7 +205,7 @@ describe('ci_wait', () => {
 
   it('logs_on_failure: false nao busca o log', async () => {
     await run('ci_wait', { run: '99', logs_on_failure: false });
-    expect(forge.called('getRunLogs')).toHaveLength(0);
+    expect(host.called('getRunLogs')).toHaveLength(0);
   });
 
   it('branch sem execucao explica', async () => {
@@ -216,7 +216,7 @@ describe('ci_wait', () => {
 describe('ci_logs', () => {
   it('repassa os filtros ao provider', async () => {
     await run('ci_logs', { run: '99', grep: 'error', tail: 10 });
-    expect(forge.called('getRunLogs')[0]?.args[2]).toEqual({
+    expect(host.called('getRunLogs')[0]?.args[2]).toEqual({
       full: undefined,
       step: undefined,
       grep: 'error',
@@ -240,7 +240,7 @@ describe('ci_config', () => {
   });
 
   it('repo sem CI diz que nao tem', async () => {
-    forge.state.actions = { variables: [], secrets: [], workflows: [] };
+    host.state.actions = { variables: [], secrets: [], workflows: [] };
     const out = await run('ci_config');
     expect(out).toContain('variables: (nenhuma');
     expect(out).toContain('workflows: (nenhum');
@@ -250,7 +250,7 @@ describe('ci_config', () => {
 describe('ci_dispatch', () => {
   it('dispara e aponta a execucao gerada', async () => {
     const out = await run('ci_dispatch', { workflow: 'build', ref: 'main' });
-    expect(forge.called('dispatchWorkflow')[0]?.args.slice(1, 3)).toEqual(['build', 'main']);
+    expect(host.called('dispatchWorkflow')[0]?.args.slice(1, 3)).toEqual(['build', 'main']);
     expect(out).toContain('Dispatch aceito: build @ main');
     expect(out).toContain('Run gerado: #100');
   });
@@ -261,7 +261,7 @@ describe('ci_dispatch', () => {
 
   it('inputs vao junto', async () => {
     await run('ci_dispatch', { workflow: 'build', ref: 'main', inputs: { ambiente: 'prod' } });
-    expect(forge.called('dispatchWorkflow')[0]?.args[3]).toEqual({ ambiente: 'prod' });
+    expect(host.called('dispatchWorkflow')[0]?.args[3]).toEqual({ ambiente: 'prod' });
   });
 });
 
@@ -274,7 +274,7 @@ describe('ci_runners', () => {
   });
 
   it('sem runner diz isso', async () => {
-    forge.state.runners = [];
+    host.state.runners = [];
     expect(await run('ci_runners')).toContain('Nenhum runner');
   });
 });
@@ -290,7 +290,7 @@ describe('pushedRepo', () => {
 describe('hook de push', () => {
   const hook = (timeoutMs = 900_000) =>
     createPushHook({
-      ctx: ctxFor(forge),
+      ctx: ctxFor(host),
       directory: '/w',
       timeoutMs,
       wait: async () => {},
@@ -309,11 +309,11 @@ describe('hook de push', () => {
   });
 
   it('repo sem workflow nao espera nada', async () => {
-    forge.state.actions = { variables: [], secrets: [], workflows: [] };
+    host.state.actions = { variables: [], secrets: [], workflows: [] };
     const output = { output: 'ok' };
     await hook()({ tool: 'bash', args: { command: 'git push origin main' } }, output);
     expect(output.output).toBe('ok');
-    expect(forge.called('getRun')).toHaveLength(0);
+    expect(host.called('getRun')).toHaveLength(0);
   });
 
   it('confirma quando o run fica verde', async () => {
@@ -330,7 +330,7 @@ describe('hook de push', () => {
   });
 
   it('avisa quando o run nao termina no prazo', async () => {
-    forge.state.runs = [
+    host.state.runs = [
       run1({ id: 100, status: 'in_progress', conclusion: null, completedAt: undefined }),
     ];
     const output = { output: 'pushed' };
@@ -340,7 +340,7 @@ describe('hook de push', () => {
 
   it('espera o run aparecer quando o webhook demora', async () => {
     let calls = 0;
-    const late = new FakeForge({ runs: [], actions: forge.state.actions });
+    const late = new FakeGitHost({ runs: [], actions: host.state.actions });
     late.state.runs = [run1()];
     const originalList = late.listRuns.bind(late);
     late.listRuns = async (...a: Parameters<typeof originalList>) => {
@@ -349,7 +349,7 @@ describe('hook de push', () => {
     };
     const waits: number[] = [];
     const pushHook = createPushHook({
-      ctx: { ...ctxFor(late), forge: late },
+      ctx: { ...ctxFor(late), host: late },
       directory: '/w',
       wait: async (ms) => void waits.push(ms),
     });

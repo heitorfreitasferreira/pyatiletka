@@ -1,21 +1,21 @@
 import type {
   CreateIssueInput,
   CreatePullInput,
-  Forge,
-  ForgeActionsConfig,
-  ForgeBranch,
-  ForgeChecks,
-  ForgeComment,
-  ForgeCompare,
-  ForgeIssue,
-  ForgeMilestone,
-  ForgeProtection,
-  ForgePull,
-  ForgePullFile,
-  ForgeReview,
-  ForgeReviewComment,
-  ForgeRun,
-  ForgeRunner,
+  GitHost,
+  ActionsConfig,
+  Branch,
+  Checks,
+  IssueComment,
+  Compare,
+  Issue,
+  Milestone,
+  Protection,
+  Pull,
+  PullFile,
+  Review,
+  ReviewComment,
+  Run,
+  Runner,
   IssuePatch,
   ListRunsOptions,
   LogsOptions,
@@ -23,7 +23,7 @@ import type {
 } from '../providers/types';
 
 /**
- * `Forge` em memoria, para testar as tools sem rede. Guarda o que foi criado,
+ * `GitHost` em memoria, para testar as tools sem rede. Guarda o que foi criado,
  * conta as chamadas e deixa injetar erro por metodo.
  *
  * Nao entra no pacote: `src/index.ts` nao importa este arquivo, entao o
@@ -33,23 +33,23 @@ import type {
 export type Call = { method: string; args: unknown[] };
 
 export type FakeState = {
-  issues: ForgeIssue[];
-  comments: Record<number, ForgeComment[]>;
+  issues: Issue[];
+  comments: Record<number, IssueComment[]>;
   deps: Record<number, number[]>;
-  milestones: ForgeMilestone[];
-  pulls: ForgePull[];
-  reviews: Record<number, ForgeReview[]>;
-  reviewComments: Record<string, ForgeReviewComment[]>;
-  checks: Record<string, ForgeChecks | undefined>;
-  files: Record<number, ForgePullFile[]>;
+  milestones: Milestone[];
+  pulls: Pull[];
+  reviews: Record<number, Review[]>;
+  reviewComments: Record<string, ReviewComment[]>;
+  checks: Record<string, Checks | undefined>;
+  files: Record<number, PullFile[]>;
   diff: Record<number, string>;
-  runs: ForgeRun[];
+  runs: Run[];
   runLogs: Record<number, string>;
-  runners: ForgeRunner[];
-  actions: ForgeActionsConfig;
-  branches: ForgeBranch[];
-  protections: ForgeProtection[];
-  compare: Record<string, ForgeCompare>;
+  runners: Runner[];
+  actions: ActionsConfig;
+  branches: Branch[];
+  protections: Protection[];
+  compare: Record<string, Compare>;
   repos: string[];
 };
 
@@ -78,7 +78,7 @@ function emptyState(): FakeState {
 
 const key = (base: string, head: string) => `${base}...${head}`;
 
-export class FakeForge implements Forge {
+export class FakeGitHost implements GitHost {
   readonly provider = 'gitea' as const;
   readonly state: FakeState;
   /** Toda chamada feita, na ordem. Serve para as assercoes. */
@@ -119,11 +119,11 @@ export class FakeForge implements Forge {
     return this.record('listRepos', [org], this.state.repos);
   }
 
-  async getIssue(repo: string, n: number): Promise<ForgeIssue> {
+  async getIssue(repo: string, n: number): Promise<Issue> {
     return this.record('getIssue', [repo, n], this.issue(n));
   }
 
-  async listIssues(repo: string, state: 'open' | 'closed' | 'all'): Promise<ForgeIssue[]> {
+  async listIssues(repo: string, state: 'open' | 'closed' | 'all'): Promise<Issue[]> {
     return this.record(
       'listIssues',
       [repo, state],
@@ -131,9 +131,9 @@ export class FakeForge implements Forge {
     );
   }
 
-  async createIssue(repo: string, input: CreateIssueInput): Promise<ForgeIssue> {
+  async createIssue(repo: string, input: CreateIssueInput): Promise<Issue> {
     const n = this.nextNumber();
-    const created: ForgeIssue = {
+    const created: Issue = {
       id: n * 1000,
       number: n,
       title: input.title,
@@ -147,7 +147,7 @@ export class FakeForge implements Forge {
     return created;
   }
 
-  async updateIssue(repo: string, n: number, patch: IssuePatch): Promise<ForgeIssue> {
+  async updateIssue(repo: string, n: number, patch: IssuePatch): Promise<Issue> {
     this.note('updateIssue', [repo, n, patch]);
     const i = this.issue(n);
     if (patch.title !== undefined) i.title = patch.title;
@@ -157,7 +157,7 @@ export class FakeForge implements Forge {
     return i;
   }
 
-  async listComments(repo: string, n: number): Promise<ForgeComment[]> {
+  async listComments(repo: string, n: number): Promise<IssueComment[]> {
     return this.record('listComments', [repo, n], this.state.comments[n] ?? []);
   }
 
@@ -178,12 +178,12 @@ export class FakeForge implements Forge {
     }
   }
 
-  async listDependencies(repo: string, n: number): Promise<ForgeIssue[]> {
+  async listDependencies(repo: string, n: number): Promise<Issue[]> {
     const nums = this.state.deps[n] ?? [];
     return this.record(
       'listDependencies',
       [repo, n],
-      nums.map((d) => this.state.issues.find((i) => i.number === d)).filter(Boolean) as ForgeIssue[]
+      nums.map((d) => this.state.issues.find((i) => i.number === d)).filter(Boolean) as Issue[]
     );
   }
 
@@ -198,14 +198,14 @@ export class FakeForge implements Forge {
     this.state.deps[n] = (this.state.deps[n] ?? []).filter((d) => d !== blocker);
   }
 
-  async listMilestones(repo: string): Promise<ForgeMilestone[]> {
+  async listMilestones(repo: string): Promise<Milestone[]> {
     return this.record('listMilestones', [repo], this.state.milestones);
   }
 
   async createMilestone(
     repo: string,
     input: { title: string; description?: string }
-  ): Promise<ForgeMilestone> {
+  ): Promise<Milestone> {
     const created = {
       id: this.state.milestones.length + 1,
       title: input.title,
@@ -223,7 +223,7 @@ export class FakeForge implements Forge {
     repo: string,
     id: string | number,
     patch: { title?: string; description?: string; state?: 'open' | 'closed' }
-  ): Promise<ForgeMilestone> {
+  ): Promise<Milestone> {
     this.note('updateMilestone', [repo, id, patch]);
     const m = this.state.milestones.find((x) => String(x.id) === String(id));
     if (!m) throw new Error(`marco ${id} nao existe`);
@@ -240,7 +240,7 @@ export class FakeForge implements Forge {
   async listPulls(
     repo: string,
     opts: { state?: 'open' | 'closed' | 'all'; base?: string; head?: string; limit?: number }
-  ): Promise<ForgePull[]> {
+  ): Promise<Pull[]> {
     let list = this.state.pulls;
     const state = opts.state ?? 'open';
     if (state !== 'all') {
@@ -251,21 +251,17 @@ export class FakeForge implements Forge {
     return this.record('listPulls', [repo, opts], list.slice(0, opts.limit ?? 50));
   }
 
-  async getPull(repo: string, n: number): Promise<ForgePull> {
+  async getPull(repo: string, n: number): Promise<Pull> {
     const p = this.state.pulls.find((x) => x.number === n);
     if (!p) throw new Error(`PR ${n} nao existe`);
     return this.record('getPull', [repo, n], p);
   }
 
-  async listReviews(repo: string, n: number): Promise<ForgeReview[]> {
+  async listReviews(repo: string, n: number): Promise<Review[]> {
     return this.record('listReviews', [repo, n], this.state.reviews[n] ?? []);
   }
 
-  async listReviewComments(
-    repo: string,
-    n: number,
-    reviewId: number
-  ): Promise<ForgeReviewComment[]> {
+  async listReviewComments(repo: string, n: number, reviewId: number): Promise<ReviewComment[]> {
     return this.record(
       'listReviewComments',
       [repo, n, reviewId],
@@ -273,11 +269,11 @@ export class FakeForge implements Forge {
     );
   }
 
-  async getChecks(repo: string, sha: string): Promise<ForgeChecks | undefined> {
+  async getChecks(repo: string, sha: string): Promise<Checks | undefined> {
     return this.record('getChecks', [repo, sha], this.state.checks[sha]);
   }
 
-  async getPullFiles(repo: string, n: number): Promise<ForgePullFile[]> {
+  async getPullFiles(repo: string, n: number): Promise<PullFile[]> {
     return this.record('getPullFiles', [repo, n], this.state.files[n] ?? []);
   }
 
@@ -285,8 +281,8 @@ export class FakeForge implements Forge {
     return this.record('getPullDiff', [repo, n], this.state.diff[n] ?? '');
   }
 
-  async createPull(repo: string, input: CreatePullInput): Promise<ForgePull> {
-    const created: ForgePull = {
+  async createPull(repo: string, input: CreatePullInput): Promise<Pull> {
+    const created: Pull = {
       number: this.state.pulls.length + 1,
       title: input.title,
       state: 'open',
@@ -316,7 +312,7 @@ export class FakeForge implements Forge {
     return `merged (${style})`;
   }
 
-  async listRuns(repo: string, opts: ListRunsOptions): Promise<ForgeRun[]> {
+  async listRuns(repo: string, opts: ListRunsOptions): Promise<Run[]> {
     let runs = this.state.runs;
     if (opts.branch) runs = runs.filter((r) => r.branch === opts.branch);
     if (opts.event) runs = runs.filter((r) => r.event === opts.event);
@@ -324,7 +320,7 @@ export class FakeForge implements Forge {
     return this.record('listRuns', [repo, opts], runs.slice(0, opts.limit ?? 10));
   }
 
-  async getRun(repo: string, id: number): Promise<ForgeRun> {
+  async getRun(repo: string, id: number): Promise<Run> {
     const r = this.state.runs.find((x) => x.id === id);
     if (!r) throw new Error(`run ${id} nao existe`);
     return this.record('getRun', [repo, id], r);
@@ -334,7 +330,7 @@ export class FakeForge implements Forge {
     return this.record('getRunLogs', [repo, id, opts], this.state.runLogs[id] ?? '');
   }
 
-  async getActionsConfig(repo: string): Promise<ForgeActionsConfig> {
+  async getActionsConfig(repo: string): Promise<ActionsConfig> {
     return this.record('getActionsConfig', [repo], this.state.actions);
   }
 
@@ -347,15 +343,15 @@ export class FakeForge implements Forge {
     this.note('dispatchWorkflow', [repo, workflow, ref, inputs]);
   }
 
-  async listRunners(repo: string): Promise<ForgeRunner[]> {
+  async listRunners(repo: string): Promise<Runner[]> {
     return this.record('listRunners', [repo], this.state.runners);
   }
 
-  async listBranches(repo: string): Promise<ForgeBranch[]> {
+  async listBranches(repo: string): Promise<Branch[]> {
     return this.record('listBranches', [repo], this.state.branches);
   }
 
-  async getBranchProtections(repo: string, branches: string[]): Promise<ForgeProtection[]> {
+  async getBranchProtections(repo: string, branches: string[]): Promise<Protection[]> {
     return this.record(
       'getBranchProtections',
       [repo, branches],
@@ -363,13 +359,13 @@ export class FakeForge implements Forge {
     );
   }
 
-  async compare(repo: string, base: string, head: string): Promise<ForgeCompare> {
+  async compare(repo: string, base: string, head: string): Promise<Compare> {
     const found = this.state.compare[key(base, head)];
     if (!found) throw new Error(`compare ${base}...${head} sem fixture`);
     return this.record('compare', [repo, base, head], found);
   }
 
-  private issue(n: number): ForgeIssue {
+  private issue(n: number): Issue {
     const found = this.state.issues.find((i) => i.number === n);
     if (!found) throw new Error(`issue ${n} nao existe`);
     return found;
@@ -380,7 +376,7 @@ export class FakeForge implements Forge {
   }
 }
 
-export const cmp = (over: Partial<ForgeCompare> = {}): ForgeCompare => ({
+export const cmp = (over: Partial<Compare> = {}): Compare => ({
   ahead: 0,
   behind: 0,
   status: 'identical',

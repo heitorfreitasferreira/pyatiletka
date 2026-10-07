@@ -1,6 +1,6 @@
 import { loadConfig, type Config, type ProviderName } from '../config';
-import { createForge } from '../providers';
-import type { Forge } from '../providers/types';
+import { createGitHost } from '../providers';
+import type { GitHost } from '../providers/types';
 import { resolveRepo } from '../repo';
 import { readBinding, type Binding } from './binding';
 
@@ -18,7 +18,7 @@ export type Client = {
 };
 
 export type Ctx = {
-  forge: Forge;
+  host: GitHost;
   config: Config;
   /** Repo do clone, quando `directory` esta dentro de um. */
   remote?: string;
@@ -68,14 +68,14 @@ export function createCtx(input: {
   const env = input.env ?? process.env;
   const remote = resolveRepo(input.directory);
   const config = loadConfig(env, remote?.provider);
-  const forge = createForge(config);
+  const host = createGitHost(config);
 
   const notify = (message: string, variant: NotifyVariant = 'info') => {
     void input.client?.tui?.showToast?.({ body: { message, variant } });
   };
 
   return {
-    forge,
+    host,
     config,
     remote: remote?.slug,
     defaultRepo: config.defaultRepo ?? remote?.slug,
@@ -123,7 +123,7 @@ export function matchGlob(value: string, pattern: string): boolean {
  */
 export async function expandRepos(ctx: Ctx, wanted?: string[]): Promise<string[]> {
   const org = ctx.config.org;
-  const all = org ? await ctx.forge.listRepos(org) : [];
+  const all = org ? await ctx.host.listRepos(org) : [];
 
   if (!wanted?.length) {
     if (!org)

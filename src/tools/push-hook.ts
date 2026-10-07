@@ -11,7 +11,7 @@ import { isRealPush, latestRun, pushedBranch, waitRun } from './pipeline';
  */
 
 const DEFAULT_TIMEOUT_MS = 900_000;
-/** O webhook do forge as vezes demora segundos para registrar o run. */
+/** O webhook as vezes demora segundos para registrar o run. */
 const APPEAR_TRIES = 6;
 const APPEAR_WAIT_MS = 2500;
 
@@ -56,7 +56,7 @@ export function createPushHook({
     const shortName = repo.split('/')[1] ?? repo;
 
     // Repo sem CI configurado nao gera execucao nenhuma: nao ha o que esperar.
-    const cfg = await ctx.forge.getActionsConfig(repo).catch(() => undefined);
+    const cfg = await ctx.host.getActionsConfig(repo).catch(() => undefined);
     if (!cfg?.workflows.length) return;
 
     const branch = pushedBranch(cmd);
@@ -84,7 +84,7 @@ export function createPushHook({
       return;
     }
 
-    const log = await ctx.forge.getRunLogs(repo, done.id, {}).catch(() => '');
+    const log = await ctx.host.getRunLogs(repo, done.id, {}).catch(() => '');
     const errs = errorLines(log);
     output.output +=
       `\n\n[pipeline] ${shortName} run #${done.id} ${done.conclusion}: o push NAO passou pelo CI.\n` +

@@ -2,7 +2,7 @@ import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import { errorLines } from '../core/logs';
 import { branchOf, dur, fmtRun, isActive, runState } from '../core/format';
 import { expandRepos, parseRef, pickRepo, type Ctx } from '../core/context';
-import type { ForgeRun } from '../providers/types';
+import type { Run } from '../providers/types';
 
 /**
  * Tools de pipeline. `ci_wait` bloqueia dentro da chamada em vez de deixar o
@@ -30,12 +30,8 @@ const repoArg = (ctx: Ctx) =>
     );
 
 /** Ultima execucao de um repo, opcionalmente de uma branch. */
-export async function latestRun(
-  ctx: Ctx,
-  repo: string,
-  branch?: string
-): Promise<ForgeRun | undefined> {
-  const runs = await ctx.forge.listRuns(repo, { branch, limit: 1 });
+export async function latestRun(ctx: Ctx, repo: string, branch?: string): Promise<Run | undefined> {
+  const runs = await ctx.host.listRuns(repo, { branch, limit: 1 });
   return runs[0];
 }
 
@@ -47,10 +43,10 @@ export async function waitRun(
   repo: string,
   id: number,
   timeoutMs: number
-): Promise<{ run: ForgeRun; timedOut: boolean }> {
+): Promise<{ run: Run; timedOut: boolean }> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const run = await ctx.forge.getRun(repo, id);
+    const run = await ctx.host.getRun(repo, id);
     if (!isActive(run.status)) return { run, timedOut: false };
     if (Date.now() >= deadline) return { run, timedOut: true };
     await sleep(POLL_MS);
@@ -106,7 +102,7 @@ export function pipelineTools({
 
         const one = async (repo: string) => ({
           repo,
-          runs: await ctx.forge.listRuns(repo, {
+          runs: await ctx.host.listRuns(repo, {
             branch: args.branch,
             event: args.event,
             active: args.active,
@@ -128,7 +124,7 @@ export function pipelineTools({
         const blocks: string[] = [];
         let activeCount = 0;
         for (const repo of repos) {
-          const { runs } = await one(repo).catch(() => ({ repo, runs: [] as ForgeRun[] }));
+          const { runs } = await one(repo).catch(() => ({ repo, runs: [] as Run[] }));
           if (args.active) activeCount += runs.length;
           const showing = args.active ? runs : runs.slice(0, 1);
           if (!showing.length) continue;
@@ -154,7 +150,7 @@ export function pipelineTools({
         const repo = resolve(args.repo);
         const id = parseRef(args.run);
         if (!Number.isFinite(id)) throw new Error(`execucao invalida: ${args.run}`);
-        const run = await ctx.forge.getRun(repo, id);
+        const run = await ctx.host.getRun(repo, id);
         const lines = [
           `${repo} run #${run.id}${run.runNumber ? ` (nº ${run.runNumber})` : ''} - ${runState(run)} em ${dur(run)}`,
           `  titulo:    ${run.title ?? '?'}`,
@@ -167,7 +163,7 @@ export function pipelineTools({
         ];
 
         if (run.sha && !isActive(run.status)) {
-          const checks = await ctx.forge.getChecks(repo, run.sha).catch(() => undefined);
+          const checks = await ctx.host.getChecks(repo, run.sha).catch(() => undefined);
           if (checks?.statuses.length) {
             lines.push(
               `  CI do commit: ${checks.overall}`,
@@ -224,7 +220,7 @@ export function pipelineTools({
           id = found.id;
         }
 
-        const pre = await ctx.forge.getRun(repo, id);
+        const pre = await ctx.host.getRun(repo, id);
         ctx.notify(
           isActive(pre.status)
             ? `Aguardando ${repo} run #${id}`
@@ -250,7 +246,7 @@ export function pipelineTools({
         ];
 
         if (!ok && (args.logs_on_failure ?? true)) {
-          const log = await ctx.forge.getRunLogs(repo, run.id, {}).catch(() => '');
+          const log = await ctx.host.getRunLogs(repo, run.id, {}).catch(() => '');
           const errs = errorLines(log);
           if (errs.length) {
             head.push(`\n--- linhas de erro (ultimas ${errs.length}) ---`, ...errs);
@@ -286,7 +282,7 @@ export function pipelineTools({
         const repo = resolve(args.repo);
         const id = parseRef(args.run);
         if (!Number.isFinite(id)) throw new Error(`execucao invalida: ${args.run}`);
-        return ctx.forge.getRunLogs(repo, id, {
+        return ctx.host.getRunLogs(repo, id, {
           full: args.full,
           step: args.step,
           grep: args.grep,
@@ -301,7 +297,7 @@ export function pipelineTools({
       args: { repo: repoArgHere },
       async execute(args) {
         const repo = resolve(args.repo);
-        const cfg = await ctx.forge.getActionsConfig(repo);
+        const cfg = await ctx.host.getActionsConfig(repo);
         const lines = [`${repo} - CI`];
 
         lines.push(
@@ -356,7 +352,7 @@ export function pipelineTools({
         const repo = resolve(args.repo);
         const ref = args.ref ?? defaultBranch;
         if (!ref) throw new Error('Informe `ref` (branch ou tag) do dispatch.');
-        await ctx.forge.dispatchWorkflow(repo, args.workflow, ref, args.inputs);
+        await ctx.host.dispatchWorkflow(repo, args.workflow, ref, args.inputs);
         ctx.notify(`Workflow ${args.workflow} disparado em ${repo}`, 'success');
         const run = await latestRun(ctx, repo, ref).catch(() => undefined);
         return [
@@ -374,7 +370,7 @@ export function pipelineTools({
       args: { repo: repoArgHere },
       async execute(args) {
         const repo = resolve(args.repo);
-        const runners = await ctx.forge.listRunners(repo);
+        const runners = await ctx.host.listRunners(repo);
         if (!runners.length) return `Nenhum runner registrado para ${repo}.`;
         return [
           `${runners.length} runner(s):`,
@@ -389,4 +385,4 @@ export function pipelineTools({
   };
 }
 
-export type { ForgeRun };
+export type { Run };

@@ -101,7 +101,7 @@ function bindingPrompt(repo: string, issue?: number, milestone?: string): string
 
 /**
  * Os tres hooks que dependem de sessao. Fica separado da carga do plugin para
- * que o `Ctx` possa ser injetado: assim o teste monta um `FakeForge` e nao
+ * que o `Ctx` possa ser injetado: assim o teste monta um `FakeGitHost` e nao
  * chama a rede.
  */
 export function createHooks(
@@ -124,11 +124,11 @@ export function createHooks(
       let head = bindingPrompt(b.repo, b.issue, b.milestone);
       if (b.issue) {
         try {
-          const issue = await ctx.forge.getIssue(b.repo, b.issue);
+          const issue = await ctx.host.getIssue(b.repo, b.issue);
           head += `\n### ${fmtIssue(issue)}\n\n<details><summary>corpo da issue</summary>\n\n${issue.body ?? ''}\n\n</details>\n`;
           head += `\nlabels: ${issue.labels.length ? issue.labels.join(', ') : '(nenhuma)'}\n`;
 
-          const comments = await ctx.forge.listComments(b.repo, b.issue).catch(() => []);
+          const comments = await ctx.host.listComments(b.repo, b.issue).catch(() => []);
           if (comments.length) {
             head += `\n### Comentarios (${comments.length}): log de trabalho\n`;
             if (comments.length < (issue.comments ?? 0)) {
@@ -180,5 +180,5 @@ export { findMilestone, inMilestone, milestoneQueue } from './core/milestone';
 export { ConfigError, loadConfig, resolveProvider, DEFAULT_PROMOTE_ORDER } from './config';
 export { assertProse, lintProse, type ProseMode, type SlopHit } from './prose';
 export { parseRemote, resolveRepo, type ResolvedRepo } from './repo';
-export { createForge } from './providers';
+export { createGitHost } from './providers';
 export type * from './providers/types';

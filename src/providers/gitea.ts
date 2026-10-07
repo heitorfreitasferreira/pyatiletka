@@ -1,25 +1,25 @@
 import { spawn } from 'node:child_process';
 import type { Config } from '../config';
 import { shapeLog } from '../core/logs';
-import { ForgeError, Http } from './http';
+import { GitHostError, Http } from './http';
 import type {
   CreateIssueInput,
   CreatePullInput,
-  Forge,
-  ForgeActionsConfig,
-  ForgeBranch,
-  ForgeChecks,
-  ForgeComment,
-  ForgeCompare,
-  ForgeIssue,
-  ForgeMilestone,
-  ForgeProtection,
-  ForgePull,
-  ForgePullFile,
-  ForgeReview,
-  ForgeReviewComment,
-  ForgeRun,
-  ForgeRunner,
+  GitHost,
+  ActionsConfig,
+  Branch,
+  Checks,
+  IssueComment,
+  Compare,
+  Issue,
+  Milestone,
+  Protection,
+  Pull,
+  PullFile,
+  Review,
+  ReviewComment,
+  Run,
+  Runner,
   IssuePatch,
   ListRunsOptions,
   LogsOptions,
@@ -114,7 +114,7 @@ const pullPath = (repo: string, n?: number | string) =>
 
 type TeaResult = { code: number; out: string; err: string };
 
-export class GiteaForge implements Forge {
+export class GiteaHost implements GitHost {
   readonly provider = 'gitea' as const;
   private http: Http;
 
@@ -168,7 +168,7 @@ export class GiteaForge implements Forge {
 
   // -- mapeadores -----------------------------------------------------------
 
-  private mapIssue(i: GiteaIssue): ForgeIssue {
+  private mapIssue(i: GiteaIssue): Issue {
     return {
       number: i.number,
       id: i.id,
@@ -187,7 +187,7 @@ export class GiteaForge implements Forge {
     };
   }
 
-  private mapMilestone(m: GiteaMilestone): ForgeMilestone {
+  private mapMilestone(m: GiteaMilestone): Milestone {
     return {
       id: m.id,
       title: m.title,
@@ -199,7 +199,7 @@ export class GiteaForge implements Forge {
     };
   }
 
-  private mapComment(c: GiteaComment): ForgeComment {
+  private mapComment(c: GiteaComment): IssueComment {
     return {
       id: c.id,
       body: c.body,
@@ -210,7 +210,7 @@ export class GiteaForge implements Forge {
     };
   }
 
-  private mapPull(p: GiteaPull): ForgePull {
+  private mapPull(p: GiteaPull): Pull {
     return {
       number: p.number,
       title: p.title,
@@ -233,7 +233,7 @@ export class GiteaForge implements Forge {
     };
   }
 
-  private mapRun(r: GiteaRun): ForgeRun {
+  private mapRun(r: GiteaRun): Run {
     return {
       id: r.id,
       status: r.status,
@@ -269,13 +269,13 @@ export class GiteaForge implements Forge {
 
   // -- issues ---------------------------------------------------------------
 
-  async getIssue(repo: string, n: number): Promise<ForgeIssue> {
+  async getIssue(repo: string, n: number): Promise<Issue> {
     return this.mapIssue(
       await this.http.request<GiteaIssue>(issuePath(repo, n), { pageParam: 'limit' })
     );
   }
 
-  async listIssues(repo: string, state: 'open' | 'closed' | 'all'): Promise<ForgeIssue[]> {
+  async listIssues(repo: string, state: 'open' | 'closed' | 'all'): Promise<Issue[]> {
     const items = await this.http.requestAll<GiteaIssue>(
       `${issuePath(repo)}?state=${state}&type=issues`,
       { pageParam: 'limit', cap: 500 }
@@ -283,7 +283,7 @@ export class GiteaForge implements Forge {
     return items.map((i) => this.mapIssue(i));
   }
 
-  async createIssue(repo: string, input: CreateIssueInput): Promise<ForgeIssue> {
+  async createIssue(repo: string, input: CreateIssueInput): Promise<Issue> {
     const labelIds = await this.resolveLabelIds(repo, input.labels);
     const created = await this.http.request<GiteaIssue>(issuePath(repo), {
       pageParam: 'limit',
@@ -293,7 +293,7 @@ export class GiteaForge implements Forge {
     return this.mapIssue(created);
   }
 
-  async updateIssue(repo: string, n: number, patch: IssuePatch): Promise<ForgeIssue> {
+  async updateIssue(repo: string, n: number, patch: IssuePatch): Promise<Issue> {
     const body: Record<string, unknown> = {};
     if (patch.title !== undefined) body.title = patch.title;
     if (patch.body !== undefined) body.body = patch.body;
@@ -334,7 +334,7 @@ export class GiteaForge implements Forge {
 
   // -- comentarios ----------------------------------------------------------
 
-  async listComments(repo: string, n: number): Promise<ForgeComment[]> {
+  async listComments(repo: string, n: number): Promise<IssueComment[]> {
     const out = await this.http.request<GiteaComment[]>(`${issuePath(repo, n)}/comments`, {
       pageParam: 'limit',
     });
@@ -359,7 +359,7 @@ export class GiteaForge implements Forge {
 
   // -- dependencias ---------------------------------------------------------
 
-  async listDependencies(repo: string, n: number): Promise<ForgeIssue[]> {
+  async listDependencies(repo: string, n: number): Promise<Issue[]> {
     const out = await this.http.requestAll<GiteaIssue>(`${issuePath(repo, n)}/dependencies`, {
       pageParam: 'limit',
       cap: 100,
@@ -406,7 +406,7 @@ export class GiteaForge implements Forge {
 
   // -- milestones -----------------------------------------------------------
 
-  async listMilestones(repo: string): Promise<ForgeMilestone[]> {
+  async listMilestones(repo: string): Promise<Milestone[]> {
     const out = await this.http.request<GiteaMilestone[]>(
       `/repos/${repo}/milestones?state=all&limit=50`,
       {
@@ -419,7 +419,7 @@ export class GiteaForge implements Forge {
   async createMilestone(
     repo: string,
     input: { title: string; description?: string }
-  ): Promise<ForgeMilestone> {
+  ): Promise<Milestone> {
     const created = await this.http.request<GiteaMilestone>(`/repos/${repo}/milestones`, {
       pageParam: 'limit',
       method: 'POST',
@@ -432,7 +432,7 @@ export class GiteaForge implements Forge {
     repo: string,
     id: string | number,
     patch: { title?: string; description?: string; state?: 'open' | 'closed' }
-  ): Promise<ForgeMilestone> {
+  ): Promise<Milestone> {
     const body: Record<string, unknown> = {};
     if (patch.title !== undefined) body.title = patch.title;
     if (patch.description !== undefined) body.description = patch.description;
@@ -464,7 +464,7 @@ export class GiteaForge implements Forge {
   async listPulls(
     repo: string,
     opts: { state?: 'open' | 'closed' | 'all'; base?: string; head?: string; limit?: number }
-  ): Promise<ForgePull[]> {
+  ): Promise<Pull[]> {
     const state = opts.state ?? 'open';
     const limit = opts.limit ?? 50;
     let q = `${pullPath(repo)}?state=${state}&limit=${Math.max(limit, 50)}`;
@@ -475,13 +475,13 @@ export class GiteaForge implements Forge {
     return filtered.slice(0, limit).map((p) => this.mapPull(p));
   }
 
-  async getPull(repo: string, n: number): Promise<ForgePull> {
+  async getPull(repo: string, n: number): Promise<Pull> {
     return this.mapPull(
       await this.http.request<GiteaPull>(pullPath(repo, n), { pageParam: 'limit' })
     );
   }
 
-  async listReviews(repo: string, n: number): Promise<ForgeReview[]> {
+  async listReviews(repo: string, n: number): Promise<Review[]> {
     const out = await this.http.request<
       {
         id: number;
@@ -505,11 +505,7 @@ export class GiteaForge implements Forge {
     }));
   }
 
-  async listReviewComments(
-    repo: string,
-    n: number,
-    reviewId: number
-  ): Promise<ForgeReviewComment[]> {
+  async listReviewComments(repo: string, n: number, reviewId: number): Promise<ReviewComment[]> {
     const out = await this.http.request<
       {
         id: number;
@@ -532,7 +528,7 @@ export class GiteaForge implements Forge {
     }));
   }
 
-  async getChecks(repo: string, sha: string): Promise<ForgeChecks | undefined> {
+  async getChecks(repo: string, sha: string): Promise<Checks | undefined> {
     if (!sha) return undefined;
     try {
       const st = await this.http.request<{
@@ -549,12 +545,12 @@ export class GiteaForge implements Forge {
         })),
       };
     } catch (e) {
-      if (e instanceof ForgeError) return undefined;
+      if (e instanceof GitHostError) return undefined;
       throw e;
     }
   }
 
-  async createPull(repo: string, input: CreatePullInput): Promise<ForgePull> {
+  async createPull(repo: string, input: CreatePullInput): Promise<Pull> {
     const created = await this.http.request<GiteaPull>(pullPath(repo), {
       pageParam: 'limit',
       method: 'POST',
@@ -568,7 +564,7 @@ export class GiteaForge implements Forge {
     return this.mapPull(created);
   }
 
-  async getPullFiles(repo: string, n: number): Promise<ForgePullFile[]> {
+  async getPullFiles(repo: string, n: number): Promise<PullFile[]> {
     const out = await this.http.request<
       {
         filename: string;
@@ -619,7 +615,7 @@ export class GiteaForge implements Forge {
 
   // -- pipeline -------------------------------------------------------------
 
-  async listRuns(repo: string, opts: ListRunsOptions): Promise<ForgeRun[]> {
+  async listRuns(repo: string, opts: ListRunsOptions): Promise<Run[]> {
     const limit = opts.limit ?? 10;
     let q = `/repos/${repo}/actions/runs?limit=${Math.max(limit, 20)}`;
     if (opts.branch) q += `&branch=${encodeURIComponent(opts.branch)}`;
@@ -630,7 +626,7 @@ export class GiteaForge implements Forge {
     return runs.slice(0, limit).map((r) => this.mapRun(r));
   }
 
-  async getRun(repo: string, id: number): Promise<ForgeRun> {
+  async getRun(repo: string, id: number): Promise<Run> {
     return this.mapRun(
       await this.http.request<GiteaRun>(`/repos/${repo}/actions/runs/${id}`, { pageParam: 'limit' })
     );
@@ -638,9 +634,9 @@ export class GiteaForge implements Forge {
 
   async getRunLogs(repo: string, id: number, opts: LogsOptions): Promise<string> {
     const r = await this.tea(['actions', 'runs', 'logs', String(id), '--repo', repo], 180_000);
-    const fail = GiteaForge.teaFail(r, `log do run ${id}`);
+    const fail = GiteaHost.teaFail(r, `log do run ${id}`);
     if (fail) throw new Error(fail);
-    let log = GiteaForge.stripTeaNoise(r.out);
+    let log = GiteaHost.stripTeaNoise(r.out);
     if (opts.step) {
       const blocks = log.split(/(?=^Job: )/m);
       const key = opts.step.toLowerCase();
@@ -650,7 +646,7 @@ export class GiteaForge implements Forge {
     return shapeLog(log, opts);
   }
 
-  async getActionsConfig(repo: string): Promise<ForgeActionsConfig> {
+  async getActionsConfig(repo: string): Promise<ActionsConfig> {
     const [vars, secrets, wf] = await Promise.all([
       this.http
         .request<{ name: string; data?: string }[]>(`/repos/${repo}/actions/variables`, {
@@ -692,7 +688,7 @@ export class GiteaForge implements Forge {
     const argv = ['actions', 'workflows', 'dispatch', workflow, '--repo', repo, '--ref', ref];
     for (const [k, v] of Object.entries(inputs ?? {})) argv.push('-i', `${k}=${v}`);
     const r = await this.tea(argv, 90_000);
-    const fail = GiteaForge.teaFail(r, `dispatch de ${workflow}`);
+    const fail = GiteaHost.teaFail(r, `dispatch de ${workflow}`);
     if (fail) throw new Error(fail);
   }
 
@@ -704,7 +700,7 @@ export class GiteaForge implements Forge {
    * casos e ainda e o mais preciso: sao os runners que poderiam pegar o job
    * daquele repo.
    */
-  async listRunners(repo: string): Promise<ForgeRunner[]> {
+  async listRunners(repo: string): Promise<Runner[]> {
     const data = await this.http.request<{
       runners?: {
         id: number;
@@ -725,7 +721,7 @@ export class GiteaForge implements Forge {
 
   // -- branches -------------------------------------------------------------
 
-  async listBranches(repo: string): Promise<ForgeBranch[]> {
+  async listBranches(repo: string): Promise<Branch[]> {
     const out = await this.http.request<{ name: string; protected?: boolean }[]>(
       `/repos/${repo}/branches?limit=100`,
       {
@@ -738,7 +734,7 @@ export class GiteaForge implements Forge {
     }));
   }
 
-  async getBranchProtections(repo: string, branches: string[]): Promise<ForgeProtection[]> {
+  async getBranchProtections(repo: string, branches: string[]): Promise<Protection[]> {
     const all = await this.http
       .request<
         {
@@ -773,7 +769,7 @@ export class GiteaForge implements Forge {
    * resposta truncada, que e o jeito de `branch_compare` dizer "ja identicas"
    * para duas branches que divergem.
    */
-  async compare(repo: string, base: string, head: string): Promise<ForgeCompare> {
+  async compare(repo: string, base: string, head: string): Promise<Compare> {
     const one = async (a: string, b: string) => {
       const data = await this.http.request<{
         total_commits?: number;
@@ -793,7 +789,7 @@ export class GiteaForge implements Forge {
     const [frente, tras] = await Promise.all([one(base, head), one(head, base)]);
     const ahead = frente.count;
     const behind = tras.count;
-    const status: ForgeCompare['status'] =
+    const status: Compare['status'] =
       ahead > 0 && behind > 0
         ? 'diverged'
         : ahead > 0

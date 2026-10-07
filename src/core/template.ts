@@ -4,7 +4,7 @@ import { join } from 'node:path';
 /**
  * Template de issue lido do proprio repo.
  *
- * A UI do forge so injeta o template quando a issue nasce por ela. Como aqui
+ * A UI so injeta o template quando a issue nasce por ela. Como aqui
  * toda issue nasce por `issue_create`, o plugin le o mesmo arquivo e usa como
  * corpo padrao, para template e API nao divergirem.
  *
@@ -24,14 +24,14 @@ export type Template = {
   labels: string[];
 };
 
-/** Divide o frontmatter YAML simples do forge do corpo markdown. */
+/** Divide o frontmatter YAML do corpo markdown. */
 export function splitFrontmatter(raw: string): { front: string; body: string } {
   const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
   if (!m) return { front: '', body: raw };
   return { front: m[1], body: raw.slice(m[0].length) };
 }
 
-/** `labels: ["a", "b"]` ou `- a` linha a linha. So o que o forge usa. */
+/** `labels: ["a", "b"]` ou `- a` linha a linha. So o que a UI usa. */
 export function frontLabels(front: string): string[] {
   const inline = front.match(/^labels:\s*\[(.*)\]/m);
   if (inline) {

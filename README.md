@@ -99,13 +99,13 @@ O GitHub tem consistencia eventual na listagem de issues: logo depois de
 `issue_create`, um `milestone_view` pode mostrar a fila curta por alguns
 segundos. Repita a chamada.
 
-Dependencias vao pela secao de dependencias da API do forge, a mesma da UI, via
+Dependencias vao pela secao de dependencias da API, a mesma da UI, via
 `issue_depend`. `milestone_view` le essa secao para montar a fila. Escrever
 dependencia como texto no corpo nao cria aresta.
 
 ## Template de issue
 
-A UI do forge so injeta o template quando a issue nasce por ela. Como aqui toda
+A UI so injeta o template quando a issue nasce por ela. Como aqui toda
 issue nasce por `issue_create`, o plugin le o mesmo arquivo do repo. Os dois
 caminhos valem:
 
@@ -229,11 +229,11 @@ execucao esperar: informe `PYATILETKA_DEFAULT_BRANCH` se quiser um padrao.
 | `commit_list` | commits do clone local, com filtro de autor e datas |
 
 `branch_promote` e `commit_list` usam o git local e precisam do clone no
-workspace. As outras duas falam com o forge e funcionam sem clone.
+workspace. As outras duas falam com a API e funcionam sem clone.
 
 `branch_promote` cria a branch de destino quando ela ainda nao existe, e
 `branch_compare` recusa com o nome da branch que falta. Nos dois o compare 404
-quando uma ref nao existe, e o forge nao diz qual delas.
+quando uma ref nao existe, e a API nao diz qual delas.
 
 A ordem de promocao vem de `PYATILETKA_PROMOTE_ORDER` e o padrao e
 `staging,production`:
@@ -286,12 +286,12 @@ mise run build      # bun build
 mise run format     # prettier
 ```
 
-O contrato `Forge`, em `src/providers/types.ts`, e a unica fronteira entre as
+O contrato `GitHost`, em `src/providers/types.ts`, e a unica fronteira entre as
 tools e as APIs. As tools nunca chamam HTTP direto: o que diverge entre Gitea e
 GitHub (id contra number de marco, nome contra id de label, paginacao, formato
 de log, corpo de dependencia) fica no provider.
 
-`src/testing/fake-forge.ts` implementa `Forge` em memoria, para as tools serem
+`src/testing/fake-git-host.ts` implementa `GitHost` em memoria, para as tools serem
 testadas sem rede. Nao entra no pacote.
 
 ## Licenca

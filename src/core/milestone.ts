@@ -1,4 +1,4 @@
-import type { ForgeIssue, ForgeMilestone } from '../providers/types';
+import type { Issue, Milestone } from '../providers/types';
 import { classify, priorityOf, priorityLabel, type IssueState } from './format';
 
 /**
@@ -12,7 +12,7 @@ import { classify, priorityOf, priorityLabel, type IssueState } from './format';
  * Resolve um marco por id (`13`, `#13`) ou por titulo parcial (`Lab`).
  * Quem vem de um comando ja passa o id, entao id tem precedencia.
  */
-export function findMilestone(all: ForgeMilestone[], ref: string, repo: string): ForgeMilestone {
+export function findMilestone(all: Milestone[], ref: string, repo: string): Milestone {
   const wanted = ref.trim().replace(/^#/, '');
   const byId = all.find((m) => String(m.id) === wanted);
   if (byId) return byId;
@@ -34,7 +34,7 @@ export function findMilestone(all: ForgeMilestone[], ref: string, repo: string):
 }
 
 /** Casa o filtro de marco de `issue_list`: id numerico OU titulo parcial. */
-export function inMilestone(i: ForgeIssue, ref: string): boolean {
+export function inMilestone(i: Issue, ref: string): boolean {
   if (!i.milestone) return false;
   const wanted = ref.trim().replace(/^#/, '');
   return (
@@ -71,16 +71,11 @@ export type Queue = {
  * marco. Dependencia de outro marco continua valendo e aparece na linha como
  * `fora`: sem isso a issue pareceria livre quando nao esta.
  */
-export function milestoneQueue(
-  repo: string,
-  ms: ForgeMilestone,
-  items: ForgeIssue[],
-  deps: Deps
-): Queue {
+export function milestoneQueue(repo: string, ms: Milestone, items: Issue[], deps: Deps): Queue {
   const total = ms.openIssues + ms.closedIssues;
   const pct = total ? Math.round((ms.closedIssues / total) * 100) : 0;
 
-  const byState = new Map<IssueState, ForgeIssue[]>();
+  const byState = new Map<IssueState, Issue[]>();
   for (const i of items) {
     const k = classify(i);
     byState.set(k, [...(byState.get(k) ?? []), i]);
@@ -100,11 +95,10 @@ export function milestoneQueue(
     head.push('', '--- descricao do marco ---', ms.description.trim().slice(0, 4000));
   }
 
-  const prio = (a: ForgeIssue, b: ForgeIssue) =>
-    priorityOf(a) - priorityOf(b) || a.number - b.number;
+  const prio = (a: Issue, b: Issue) => priorityOf(a) - priorityOf(b) || a.number - b.number;
   const openInside = (n: number) => items.find((i) => i.number === n)?.state !== 'closed';
 
-  const line = (i: ForgeIssue) => {
+  const line = (i: Issue) => {
     const inside = deps.inside.get(i.number) ?? [];
     const waited = inside.filter(openInside);
     const outside = deps.outside.get(i.number) ?? [];
@@ -162,7 +156,7 @@ export function milestoneQueue(
       `  (${priorityLabel(first)}; dependencias: ${inside.length ? `${solved} (resolvidas)` : 'nada'})`,
     ];
   } else if (byState.get('in-progress')?.length) {
-    const ongoing = (byState.get('in-progress') as ForgeIssue[]).sort(prio)[0];
+    const ongoing = (byState.get('in-progress') as Issue[]).sort(prio)[0];
     suggestion = [`PROXIMA SUGERIDA: #${ongoing.number} - ja esta em curso, retome ela`];
   } else {
     suggestion = [

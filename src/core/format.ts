@@ -1,4 +1,4 @@
-import type { ForgeComment, ForgeIssue, ForgeRun } from '../providers/types';
+import type { IssueComment, Issue, Run } from '../providers/types';
 
 /**
  * Formatacao de issue, comentario e run. Tudo aqui e puro: recebe o tipo
@@ -15,7 +15,7 @@ export const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'] as const;
 export type IssueState = 'done' | 'blocked' | 'need-info' | 'in-progress' | 'todo';
 
 /** Estado logico, derivado de `state` e das labels `Status/`. */
-export function classify(i: ForgeIssue): IssueState {
+export function classify(i: Issue): IssueState {
   if (i.state === 'closed') return 'done';
   if (i.labels.includes('Status/Blocked')) return 'blocked';
   if (i.labels.includes('Status/Need More Info')) return 'need-info';
@@ -24,12 +24,12 @@ export function classify(i: ForgeIssue): IssueState {
 }
 
 /** Indice em `PRIORITIES`. Menor e mais urgente. `-1` quando a issue nao tem. */
-export function priorityOf(i: ForgeIssue): number {
+export function priorityOf(i: Issue): number {
   const label = i.labels.find((l) => l.startsWith('Priority/'));
   return PRIORITIES.indexOf((label?.split('/')[1] ?? 'Medium') as (typeof PRIORITIES)[number]);
 }
 
-export function priorityLabel(i: ForgeIssue): string {
+export function priorityLabel(i: Issue): string {
   return i.labels.find((l) => l.startsWith('Priority/')) ?? 'Priority/Medium';
 }
 
@@ -41,13 +41,13 @@ export function priorityLabel(i: ForgeIssue): string {
  * janela": `updatedAt` tambem anda com comentario e label, e `createdAt` perde
  * toda issue que nasceu antes da janela.
  */
-export function dateField(kind: string, i: ForgeIssue): string | undefined {
+export function dateField(kind: string, i: Issue): string | undefined {
   if (kind === 'updated') return i.updatedAt;
   if (kind === 'closed') return i.closedAt ?? undefined;
   return i.createdAt;
 }
 
-export function fmtIssue(i: ForgeIssue): string {
+export function fmtIssue(i: Issue): string {
   const day = (v?: string | null) => (v ? v.slice(0, 10) : '');
   const meta = [
     i.user ? `autor: ${i.user}` : '',
@@ -69,7 +69,7 @@ export function fmtIssue(i: ForgeIssue): string {
 }
 
 /** Bloco de comentario. O `[id ...]` e o que permite citar depois. */
-export function fmtComment(c: ForgeComment): string {
+export function fmtComment(c: IssueComment): string {
   const edited = c.updatedAt && c.createdAt && c.updatedAt !== c.createdAt ? ' (editado)' : '';
   return [
     `--- [id ${c.id}] ${c.user ?? '?'} ${c.createdAt ?? '?'}${edited} ---`,
@@ -98,7 +98,7 @@ export function fmtReviewComment(c: {
 }
 
 /** Duracao do run. `?` quando nao ha timestamp confiavel. */
-export function dur(run: Pick<ForgeRun, 'startedAt' | 'completedAt' | 'status'>): string {
+export function dur(run: Pick<Run, 'startedAt' | 'completedAt' | 'status'>): string {
   // Run nunca executado de fato (cancelado na fila) volta com epoch em
   // `startedAt`. Antes de 2000 conta como ausente, senao a conta sai em
   // milhoes de horas.
@@ -124,7 +124,7 @@ const ACTIVE = new Set(['queued', 'in_progress', 'running', 'waiting', 'pending'
  * Branch do run. Run de `pull_request` chega sem `head_branch` em parte das
  * APIs, e o titulo "from <head> into <base>" e a unica fonte restante.
  */
-export function branchOf(r: Pick<ForgeRun, 'branch' | 'title' | 'event'>): string {
+export function branchOf(r: Pick<Run, 'branch' | 'title' | 'event'>): string {
   if (r.branch) return r.branch;
   const m = r.title?.match(/\bfrom\s+(\S+)\s+into\s+(\S+)/);
   if (m) return `${m[1]} -> ${m[2]}`;
@@ -132,11 +132,11 @@ export function branchOf(r: Pick<ForgeRun, 'branch' | 'title' | 'event'>): strin
   return '?';
 }
 
-export function runState(r: Pick<ForgeRun, 'status' | 'conclusion'>): string {
+export function runState(r: Pick<Run, 'status' | 'conclusion'>): string {
   return isActive(r.status) ? `▶ ${r.status}` : `${r.status}/${r.conclusion ?? '?'}`;
 }
 
-export function fmtRun(r: ForgeRun): string {
+export function fmtRun(r: Run): string {
   return [
     `#${String(r.id).padEnd(5)}`,
     runState(r).padEnd(24),

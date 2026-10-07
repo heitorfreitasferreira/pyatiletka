@@ -6,7 +6,7 @@ import type { ProviderName } from '../config';
  * milestone, nomes vs IDs de label, paginacao e formato de log.
  */
 
-export type ForgeIssue = {
+export type Issue = {
   number: number;
   /** Id interno. GitHub exige para criar dependencia. */
   id: number;
@@ -24,7 +24,7 @@ export type ForgeIssue = {
   closedAt?: string | null;
 };
 
-export type ForgeMilestone = {
+export type Milestone = {
   /** Gitea: id numerico. GitHub: number. Tratado como string na resolucao. */
   id: string | number;
   title: string;
@@ -35,7 +35,7 @@ export type ForgeMilestone = {
   dueOn?: string | null;
 };
 
-export type ForgeComment = {
+export type IssueComment = {
   id: number;
   body?: string;
   user?: string;
@@ -44,7 +44,7 @@ export type ForgeComment = {
   htmlUrl?: string;
 };
 
-export type ForgeReview = {
+export type Review = {
   id: number;
   state?: string;
   body?: string;
@@ -54,7 +54,7 @@ export type ForgeReview = {
   htmlUrl?: string;
 };
 
-export type ForgeReviewComment = {
+export type ReviewComment = {
   id: number;
   body?: string;
   path?: string;
@@ -64,7 +64,7 @@ export type ForgeReviewComment = {
   updatedAt?: string;
 };
 
-export type ForgePull = {
+export type Pull = {
   number: number;
   title: string;
   state: string;
@@ -85,19 +85,19 @@ export type ForgePull = {
   comments?: number;
 };
 
-export type ForgeCheck = {
+export type Check = {
   context: string;
   status: string;
   description?: string;
   url?: string;
 };
 
-export type ForgeChecks = {
+export type Checks = {
   overall: string;
-  statuses: ForgeCheck[];
+  statuses: Check[];
 };
 
-export type ForgeRun = {
+export type Run = {
   id: number;
   status: string;
   conclusion?: string | null;
@@ -112,7 +112,7 @@ export type ForgeRun = {
   completedAt?: string;
 };
 
-export type ForgeRunner = {
+export type Runner = {
   id: number;
   name: string;
   status: string;
@@ -120,31 +120,31 @@ export type ForgeRunner = {
   labels?: string[];
 };
 
-export type ForgeWorkflow = {
+export type Workflow = {
   id: string;
   name: string;
   path?: string;
   state?: string;
 };
 
-export type ForgeActionsConfig = {
+export type ActionsConfig = {
   variables: { name: string; value?: string; lines?: number; chars?: number }[];
   secrets: string[];
-  workflows: ForgeWorkflow[];
+  workflows: Workflow[];
 };
 
-export type ForgeBranch = {
+export type Branch = {
   name: string;
   protected: boolean;
 };
 
-export type ForgeProtection = {
+export type Protection = {
   branch: string;
   summary: string;
   raw?: unknown;
 };
 
-export type ForgeCompare = {
+export type Compare = {
   ahead: number;
   behind: number;
   status: 'behind' | 'ahead' | 'diverged' | 'identical';
@@ -176,7 +176,7 @@ export type CreatePullInput = {
 
 export type MergeStyle = 'merge' | 'squash' | 'rebase' | 'fast-forward-only';
 
-export type ForgePullFile = {
+export type PullFile = {
   filename: string;
   status: string;
   additions: number;
@@ -202,54 +202,51 @@ export type LogsOptions = {
   full?: boolean;
 };
 
-export interface Forge {
+export interface GitHost {
   readonly provider: ProviderName;
 
   // -- repo ---------------------------------------------------------------
   listRepos(org: string): Promise<string[]>;
 
   // -- issues -------------------------------------------------------------
-  getIssue(repo: string, n: number): Promise<ForgeIssue>;
-  listIssues(repo: string, state: 'open' | 'closed' | 'all'): Promise<ForgeIssue[]>;
-  createIssue(repo: string, input: CreateIssueInput): Promise<ForgeIssue>;
-  updateIssue(repo: string, n: number, patch: IssuePatch): Promise<ForgeIssue>;
+  getIssue(repo: string, n: number): Promise<Issue>;
+  listIssues(repo: string, state: 'open' | 'closed' | 'all'): Promise<Issue[]>;
+  createIssue(repo: string, input: CreateIssueInput): Promise<Issue>;
+  updateIssue(repo: string, n: number, patch: IssuePatch): Promise<Issue>;
 
   // -- comentarios ---------------------------------------------------------
-  listComments(repo: string, n: number): Promise<ForgeComment[]>;
+  listComments(repo: string, n: number): Promise<IssueComment[]>;
   createComment(repo: string, n: number, body: string): Promise<void>;
   updateComment(repo: string, commentId: number, body: string): Promise<void>;
 
   // -- dependencias nativas -------------------------------------------------
-  listDependencies(repo: string, n: number): Promise<ForgeIssue[]>;
+  listDependencies(repo: string, n: number): Promise<Issue[]>;
   addDependencies(repo: string, n: number, blockers: number[]): Promise<void>;
   removeDependency(repo: string, n: number, blocker: number): Promise<void>;
 
   // -- milestones -----------------------------------------------------------
-  listMilestones(repo: string): Promise<ForgeMilestone[]>;
-  createMilestone(
-    repo: string,
-    input: { title: string; description?: string }
-  ): Promise<ForgeMilestone>;
+  listMilestones(repo: string): Promise<Milestone[]>;
+  createMilestone(repo: string, input: { title: string; description?: string }): Promise<Milestone>;
   updateMilestone(
     repo: string,
     id: string | number,
     patch: { title?: string; description?: string; state?: 'open' | 'closed' }
-  ): Promise<ForgeMilestone>;
+  ): Promise<Milestone>;
   setIssueMilestone(repo: string, n: number, milestoneId: string | number): Promise<void>;
 
   // -- pulls ---------------------------------------------------------------
   listPulls(
     repo: string,
     opts: { state?: 'open' | 'closed' | 'all'; base?: string; head?: string; limit?: number }
-  ): Promise<ForgePull[]>;
-  getPull(repo: string, n: number): Promise<ForgePull>;
-  listReviews(repo: string, n: number): Promise<ForgeReview[]>;
-  listReviewComments(repo: string, n: number, reviewId: number): Promise<ForgeReviewComment[]>;
-  getChecks(repo: string, sha: string): Promise<ForgeChecks | undefined>;
-  getPullFiles(repo: string, n: number): Promise<ForgePullFile[]>;
+  ): Promise<Pull[]>;
+  getPull(repo: string, n: number): Promise<Pull>;
+  listReviews(repo: string, n: number): Promise<Review[]>;
+  listReviewComments(repo: string, n: number, reviewId: number): Promise<ReviewComment[]>;
+  getChecks(repo: string, sha: string): Promise<Checks | undefined>;
+  getPullFiles(repo: string, n: number): Promise<PullFile[]>;
   /** Diff cru no formato unificado. */
   getPullDiff(repo: string, n: number): Promise<string>;
-  createPull(repo: string, input: CreatePullInput): Promise<ForgePull>;
+  createPull(repo: string, input: CreatePullInput): Promise<Pull>;
   mergePull(
     repo: string,
     n: number,
@@ -258,20 +255,20 @@ export interface Forge {
   ): Promise<string>;
 
   // -- pipeline ------------------------------------------------------------
-  listRuns(repo: string, opts: ListRunsOptions): Promise<ForgeRun[]>;
-  getRun(repo: string, id: number): Promise<ForgeRun>;
+  listRuns(repo: string, opts: ListRunsOptions): Promise<Run[]>;
+  getRun(repo: string, id: number): Promise<Run>;
   getRunLogs(repo: string, id: number, opts: LogsOptions): Promise<string>;
-  getActionsConfig(repo: string): Promise<ForgeActionsConfig>;
+  getActionsConfig(repo: string): Promise<ActionsConfig>;
   dispatchWorkflow(
     repo: string,
     workflow: string,
     ref: string,
     inputs?: Record<string, string>
   ): Promise<void>;
-  listRunners(repo: string): Promise<ForgeRunner[]>;
+  listRunners(repo: string): Promise<Runner[]>;
 
   // -- branches ------------------------------------------------------------
-  listBranches(repo: string): Promise<ForgeBranch[]>;
-  getBranchProtections(repo: string, branches: string[]): Promise<ForgeProtection[]>;
-  compare(repo: string, base: string, head: string): Promise<ForgeCompare>;
+  listBranches(repo: string): Promise<Branch[]>;
+  getBranchProtections(repo: string, branches: string[]): Promise<Protection[]>;
+  compare(repo: string, base: string, head: string): Promise<Compare>;
 }

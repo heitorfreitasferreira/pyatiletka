@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import { DEFAULT_PROMOTE_ORDER as FALLBACK_ORDER } from '../config';
 import { pickRepo, type Ctx } from '../core/context';
-import type { ForgeCompare } from '../providers/types';
+import type { Compare } from '../providers/types';
 
 /**
- * Tools de branch. `branch_compare` e `branch_protections` falam com o forge e
+ * Tools de branch. `branch_compare` e `branch_protections` falam com a API e
  * funcionam sem clone. `branch_promote` e `commit_list` usam o git local,
  * entao precisam achar o clone.
  *
@@ -77,7 +77,7 @@ export function findClone(directory: string, repo: string): string | undefined {
 }
 
 /** Veredito de comparacao, escrito para o agente decidir sem fazer a conta. */
-export function compareVerdict(base: string, head: string, cmp: ForgeCompare): string {
+export function compareVerdict(base: string, head: string, cmp: Compare): string {
   if (cmp.ahead === 0 && cmp.behind === 0) return 'ja identicas';
   if (cmp.ahead === 0) return `${base} ja contem ${head}: nao ha o que sincronizar`;
   if (cmp.behind === 0) {
@@ -104,8 +104,8 @@ export function branchTools({
       args: { repo: repoArgHere },
       async execute(args) {
         const repo = resolve(args.repo);
-        const branches = await ctx.forge.listBranches(repo).catch(() => []);
-        const rules = await ctx.forge.getBranchProtections(repo, []).catch(() => []);
+        const branches = await ctx.host.listBranches(repo).catch(() => []);
+        const rules = await ctx.host.getBranchProtections(repo, []).catch(() => []);
 
         const out = [
           `${repo} - branches: ${branches.map((b) => b.name).join(', ') || '(nenhuma)'}`,
@@ -146,7 +146,7 @@ export function branchTools({
 
     branch_compare: tool({
       description:
-        'Compara duas branches direto do forge: se uma e ancestral da outra, quantos commits cada uma tem a frente, e se ja ha PR aberto entre elas. Nao usa git local, entao funciona sem clone.',
+        'Compara duas branches direto da API: se uma e ancestral da outra, quantos commits cada uma tem a frente, e se ja ha PR aberto entre elas. Nao usa git local, entao funciona sem clone.',
       args: {
         repo: repoArgHere,
         base: tool.schema.string().describe('Branch de destino.'),
@@ -154,11 +154,11 @@ export function branchTools({
       },
       async execute(args) {
         const repo = resolve(args.repo);
-        // O compare 404 quando qualquer uma das refs nao existe, e o forge nao
+        // O compare 404 quando qualquer uma das refs nao existe, e a API nao
         // diz qual. Listar antes transforma um 404 opaco em "esta branch nao
         // existe" e ainda oferece a lista do que existe.
         const existentes = new Set(
-          (await ctx.forge.listBranches(repo).catch(() => [])).map((b) => b.name)
+          (await ctx.host.listBranches(repo).catch(() => [])).map((b) => b.name)
         );
         for (const [papel, nome] of [
           ['base', args.base],
@@ -171,8 +171,8 @@ export function branchTools({
           }
         }
 
-        const cmp = await ctx.forge.compare(repo, args.base, args.head);
-        const prs = await ctx.forge
+        const cmp = await ctx.host.compare(repo, args.base, args.head);
+        const prs = await ctx.host
           .listPulls(repo, { state: 'open', head: args.head, limit: 50 })
           .catch(() => []);
         const matching = prs.filter((p) => p.headRef === args.head && p.baseRef === args.base);
@@ -248,11 +248,11 @@ export function branchTools({
         const report: string[] = [];
         const pushed: string[] = [];
 
-        // O compare 404 quando a ref base nao existe, e a mensagem do forge nao
+        // O compare 404 quando a ref base nao existe, e a mensagem da API nao
         // diz qual dos dois lados sumiu. Saber quais branches existem separa
         // "destino novo" de "origem apagada", que nao tem o mesmo conserto.
         const existentes = new Set(
-          (await ctx.forge.listBranches(repo).catch(() => [])).map((b) => b.name)
+          (await ctx.host.listBranches(repo).catch(() => [])).map((b) => b.name)
         );
 
         /** Fetch e push de `from` para `to`. `ahead` e null quando e criacao. */
@@ -302,7 +302,7 @@ export function branchTools({
             continue;
           }
 
-          const cmp = await ctx.forge.compare(repo, to, args.from).catch((e: unknown) => {
+          const cmp = await ctx.host.compare(repo, to, args.from).catch((e: unknown) => {
             report.push(
               `  ${args.from} -> ${to}: pulado (${e instanceof Error ? e.message : String(e)})`
             );
@@ -349,7 +349,7 @@ export function branchTools({
 
     commit_list: tool({
       description:
-        'Commits locais de um repo (git log), filtrados por autor e janela de datas. Le o clone do workspace, entao mostra o que foi feito localmente e nao o que esta no forge.',
+        'Commits locais de um repo (git log), filtrados por autor e janela de datas. Le o clone do workspace, entao mostra o que foi feito localmente e nao o que esta na API.',
       args: {
         repo: repoArgHere,
         since: tool.schema.string().optional().describe('YYYY-MM-DD (inclusive).'),

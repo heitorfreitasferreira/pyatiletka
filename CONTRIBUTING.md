@@ -49,5 +49,5 @@ mise run test && mise run lint && mise run typecheck
 ```
 
 O contrato das tools esta em `src/providers/types.ts`. Tool nova fala so com a
-interface `Forge` e nunca com a API direto. O que diverge entre Gitea e GitHub
+interface `GitHost` e nunca com a API direto. O que diverge entre Gitea e GitHub
 fica no provider.

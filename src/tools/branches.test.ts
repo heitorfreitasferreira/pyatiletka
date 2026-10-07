@@ -10,11 +10,11 @@ import { branchTools, compareVerdict } from './branches';
 const contains = (haystack: string, needle: string) => expect(haystack).toContain(needle);
 import { DEFAULT_PROMOTE_ORDER } from '../config';
 import type { Ctx } from '../core/context';
-import { cmp, FakeForge } from '../testing/fake-forge';
+import { cmp, FakeGitHost } from '../testing/fake-git-host';
 import { makeConfig, REPO } from '../testing/fixtures';
 
 let dir: string;
-let forge: FakeForge;
+let host: FakeGitHost;
 let tools: Record<string, { execute: (a: unknown, c: ToolContext) => Promise<unknown> }>;
 const toasts: { message: string; variant: string }[] = [];
 
@@ -29,9 +29,9 @@ const toolCtx = {
   ask: async () => {},
 } as unknown as ToolContext;
 
-function ctxFor(f: FakeForge): Ctx {
+function ctxFor(f: FakeGitHost): Ctx {
   return {
-    forge: f,
+    host: f,
     config: makeConfig(),
     remote: REPO,
     defaultRepo: REPO,
@@ -39,7 +39,7 @@ function ctxFor(f: FakeForge): Ctx {
   };
 }
 
-const build = (f: FakeForge, order?: string[]) =>
+const build = (f: FakeGitHost, order?: string[]) =>
   branchTools({ ctx: ctxFor(f), directory: dir, promoteOrder: order });
 
 async function run(name: string, args: unknown = {}): Promise<string> {
@@ -83,7 +83,7 @@ function clone(name: string): string {
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'pyatiletka-branch-'));
   toasts.length = 0;
-  forge = new FakeForge({
+  host = new FakeGitHost({
     branches: [
       { name: 'main', protected: true },
       { name: 'staging', protected: true },
@@ -114,7 +114,7 @@ beforeEach(() => {
       'main...staging': cmp({ behind: 0, ahead: 2 }),
     },
   });
-  tools = build(forge) as never;
+  tools = build(host) as never;
 });
 
 afterEach(() => {
@@ -156,12 +156,12 @@ describe('branch_protections', () => {
   });
 
   it('repo sem regra diz isso', async () => {
-    forge.state.protections = [];
+    host.state.protections = [];
     expect(await run('branch_protections')).toContain('Nenhuma branch protegida');
   });
 
   it('regra sem detalhe cru mostra so o resumo', async () => {
-    forge.state.protections = [{ branch: 'main', summary: 'push bloqueado' }];
+    host.state.protections = [{ branch: 'main', summary: 'push bloqueado' }];
     const out = await run('branch_protections');
     expect(out).toContain('main: push bloqueado');
     expect(out).not.toContain('status check exigido');
@@ -189,7 +189,7 @@ describe('branch_compare', () => {
   });
 
   it('avisa que ja existe PR aberto entre as duas', async () => {
-    forge.state.pulls = [
+    host.state.pulls = [
       {
         number: 7,
         title: 'PR',
@@ -225,7 +225,7 @@ describe('branch_compare com ref inexistente', () => {
 
   it('nao chama o compare quando a ref falta', async () => {
     await runFail('branch_compare', { base: 'nao-existe', head: 'main' });
-    expect(forge.called('compare')).toHaveLength(0);
+    expect(host.called('compare')).toHaveLength(0);
   });
 });
 
@@ -236,7 +236,7 @@ describe('branch_promote', () => {
 
   it('branch fora da ordem e recusada antes de procurar o repo', async () => {
     const semRepo: Ctx = {
-      forge,
+      host: host,
       config: makeConfig({ org: undefined }),
       notify: () => {},
     };
@@ -261,7 +261,7 @@ describe('branch_promote', () => {
   });
 
   it('dry_run relata sem fazer push', async () => {
-    tools = build(forge, ['main', 'staging']) as never;
+    tools = build(host, ['main', 'staging']) as never;
     const out = await run('branch_promote', { from: 'main', dry_run: true });
     expect(out).toContain('main -> staging: propagaria 3 commit(s) [dry-run]');
     expect(out).toContain('Nada foi propagado');
@@ -274,7 +274,7 @@ describe('branch_promote', () => {
   });
 
   it('destino divergente e pulado, e a cadeia continua', async () => {
-    tools = build(forge, ['main', 'staging', 'production']) as never;
+    tools = build(host, ['main', 'staging', 'production']) as never;
     const out = await run('branch_promote', { from: 'main', dry_run: true });
     // staging tem o que receber; production esta divergente e e pulada.
     expect(out).toContain('main -> staging: propagaria 3 commit(s) [dry-run]');
@@ -282,45 +282,45 @@ describe('branch_promote', () => {
   });
 
   it('ordem configuravel muda o destino padrao', async () => {
-    tools = build(forge, ['main', 'staging', 'production']) as never;
+    tools = build(host, ['main', 'staging', 'production']) as never;
     expect(await run('branch_promote', { from: 'main' })).toContain(
       'promocao main -> [staging, production]'
     );
-    tools = build(forge, ['main', 'staging']) as never;
+    tools = build(host, ['main', 'staging']) as never;
     expect(await run('branch_promote', { from: 'main' })).toContain('promocao main -> [staging]');
   });
 
   it('destino que nao existe: o push cria a branch', async () => {
-    forge.state.branches = [
+    host.state.branches = [
       { name: 'main', protected: true },
       { name: 'staging', protected: true },
     ];
-    tools = build(forge, ['staging', 'nova-producao']) as never;
+    tools = build(host, ['staging', 'nova-producao']) as never;
     const out = await run('branch_promote', { from: 'staging', dry_run: true });
     contains(out, 'destino nao existe, o push criaria a branch');
     contains(out, 'staging -> nova-producao');
   });
 
   it('destino novo com dry_run nao tenta comparar nem fazer push', async () => {
-    forge.state.branches = [
+    host.state.branches = [
       { name: 'main', protected: true },
       { name: 'staging', protected: true },
     ];
-    tools = build(forge, ['staging', 'nova-producao']) as never;
+    tools = build(host, ['staging', 'nova-producao']) as never;
     await run('branch_promote', { from: 'staging', dry_run: true });
     // O compare 404 quando a ref base nao existe; nao chega a ser chamado.
-    expect(forge.called('compare')).toHaveLength(0);
+    expect(host.called('compare')).toHaveLength(0);
   });
 
   it('origem que nao existe e recusada com o nome dela', async () => {
-    forge.state.branches = [{ name: 'main', protected: true }];
-    tools = build(forge, ['fantasma', 'staging']) as never;
+    host.state.branches = [{ name: 'main', protected: true }];
+    tools = build(host, ['fantasma', 'staging']) as never;
     const out = await runFail('branch_promote', { from: 'fantasma' });
     contains(out, 'branch de origem "fantasma" nao existe');
   });
 
   it('sem clone local, diz o comando para rodar na mao', async () => {
-    tools = build(forge, ['main', 'staging']) as never;
+    tools = build(host, ['main', 'staging']) as never;
     const out = await run('branch_promote', { from: 'main' });
     expect(out).toContain('SEM CLONE LOCAL de org/repo');
     expect(out).toContain('git -C <repo> push origin main:staging');
@@ -342,7 +342,7 @@ describe('branch_promote', () => {
       encoding: 'utf8',
     });
 
-    tools = build(forge, ['staging', 'main']) as never;
+    tools = build(host, ['staging', 'main']) as never;
     const out = await run('branch_promote', { from: 'staging', to: ['main'] });
     // `main...staging` no fixture e que compara destino...origem.
     expect(out).toContain('propagados (push fast-forward)');

@@ -1,15 +1,15 @@
 import type { Config } from '../config';
 import type { ProseMode } from '../prose';
-import type { ForgeComment, ForgeIssue, ForgeMilestone } from '../providers/types';
+import type { IssueComment, Issue, Milestone } from '../providers/types';
 
 /**
  * Fabricas de fixture para teste. Os campos que as tools leem vem preenchidos
  * por padrao, e cada teste sobrescreve so o que importa para a assercao.
  */
 
-export type IssueInput = Partial<ForgeIssue> & { number: number };
+export type IssueInput = Partial<Issue> & { number: number };
 
-export function makeIssue(input: IssueInput): ForgeIssue {
+export function makeIssue(input: IssueInput): Issue {
   return {
     id: input.number * 1000,
     title: `issue ${input.number}`,
@@ -20,7 +20,7 @@ export function makeIssue(input: IssueInput): ForgeIssue {
   };
 }
 
-export function makeComment(input: Partial<ForgeComment> & { id: number }): ForgeComment {
+export function makeComment(input: Partial<IssueComment> & { id: number }): IssueComment {
   return {
     body: `corpo do comentario ${input.id}`,
     user: 'alguem',
@@ -30,8 +30,8 @@ export function makeComment(input: Partial<ForgeComment> & { id: number }): Forg
 }
 
 export function makeMilestone(
-  input: Partial<ForgeMilestone> & { id: string | number; title: string }
-): ForgeMilestone {
+  input: Partial<Milestone> & { id: string | number; title: string }
+): Milestone {
   return {
     state: 'open',
     openIssues: 0,
@@ -46,7 +46,7 @@ export const REPO = 'org/repo';
 export function makeConfig(over: Partial<Config> = {}): Config {
   return {
     provider: 'gitea',
-    baseUrl: 'https://forge.test',
+    baseUrl: 'https://git.test',
     token: 'token-de-teste',
     org: 'org',
     defaultRepo: REPO,

@@ -80,12 +80,12 @@
 
 ## Onde mexer
 
-- `src/providers/types.ts`: o contrato `Forge`. Toda tool fala so com esta
+- `src/providers/types.ts`: o contrato `GitHost`. Toda tool fala so com esta
   interface. O que diverge entre Gitea e GitHub fica em `src/providers/`.
 - `src/core/`: funcoes puras. `format`, `template`, `milestone`, `binding` e
   `context` nao tocam rede nem disco, exceto `binding`.
 - `src/tools/`: as tools e o hook de push. Recebem um `Ctx` pronto.
-- `src/testing/`: `FakeForge` e fixtures. Nao entra no `dist`, porque
+- `src/testing/`: `FakeGitHost` e fixtures. Nao entra no `dist`, porque
   `src/index.ts` nao importa.
 
 Tool nova entra em um dos grupos existentes de `src/tools/` e vira item de

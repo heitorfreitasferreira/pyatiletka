@@ -1,25 +1,25 @@
 import { unzipSync } from 'fflate';
 import type { Config } from '../config';
 import { shapeLog } from '../core/logs';
-import { ForgeError, Http } from './http';
+import { GitHostError, Http } from './http';
 import type {
   CreateIssueInput,
   CreatePullInput,
-  Forge,
-  ForgeActionsConfig,
-  ForgeBranch,
-  ForgeChecks,
-  ForgeComment,
-  ForgeCompare,
-  ForgeIssue,
-  ForgeMilestone,
-  ForgeProtection,
-  ForgePull,
-  ForgePullFile,
-  ForgeReview,
-  ForgeReviewComment,
-  ForgeRun,
-  ForgeRunner,
+  GitHost,
+  ActionsConfig,
+  Branch,
+  Checks,
+  IssueComment,
+  Compare,
+  Issue,
+  Milestone,
+  Protection,
+  Pull,
+  PullFile,
+  Review,
+  ReviewComment,
+  Run,
+  Runner,
   IssuePatch,
   ListRunsOptions,
   LogsOptions,
@@ -116,7 +116,7 @@ const issuePath = (repo: string, n?: number | string) =>
 const pullPath = (repo: string, n?: number | string) =>
   `/repos/${repo}/pulls${n === undefined ? '' : `/${String(n).replace(/^#/, '')}`}`;
 
-export class GitHubForge implements Forge {
+export class GitHubHost implements GitHost {
   readonly provider = 'github' as const;
   private http: Http;
 
@@ -128,7 +128,7 @@ export class GitHubForge implements Forge {
     return (labels ?? []).map((l) => (typeof l === 'string' ? l : (l.name ?? ''))).filter(Boolean);
   }
 
-  private mapIssue(i: GhIssue): ForgeIssue {
+  private mapIssue(i: GhIssue): Issue {
     return {
       number: i.number,
       id: i.id,
@@ -147,7 +147,7 @@ export class GitHubForge implements Forge {
     };
   }
 
-  private mapMilestone(m: GhMilestone): ForgeMilestone {
+  private mapMilestone(m: GhMilestone): Milestone {
     return {
       id: m.number,
       title: m.title,
@@ -159,7 +159,7 @@ export class GitHubForge implements Forge {
     };
   }
 
-  private mapComment(c: GhComment): ForgeComment {
+  private mapComment(c: GhComment): IssueComment {
     return {
       id: c.id,
       body: c.body ?? undefined,
@@ -170,7 +170,7 @@ export class GitHubForge implements Forge {
     };
   }
 
-  private mapPull(p: GhPull): ForgePull {
+  private mapPull(p: GhPull): Pull {
     return {
       number: p.number,
       title: p.title,
@@ -193,7 +193,7 @@ export class GitHubForge implements Forge {
     };
   }
 
-  private mapRun(r: GhRun): ForgeRun {
+  private mapRun(r: GhRun): Run {
     return {
       id: r.id,
       status: r.status,
@@ -222,11 +222,11 @@ export class GitHubForge implements Forge {
 
   // -- issues ---------------------------------------------------------------
 
-  async getIssue(repo: string, n: number): Promise<ForgeIssue> {
+  async getIssue(repo: string, n: number): Promise<Issue> {
     return this.mapIssue(await this.req<GhIssue>(issuePath(repo, n)));
   }
 
-  async listIssues(repo: string, state: 'open' | 'closed' | 'all'): Promise<ForgeIssue[]> {
+  async listIssues(repo: string, state: 'open' | 'closed' | 'all'): Promise<Issue[]> {
     const items = await this.http.requestAll<GhIssue>(`${issuePath(repo)}?state=${state}`, {
       pageParam: 'per_page',
       cap: 500,
@@ -234,7 +234,7 @@ export class GitHubForge implements Forge {
     return items.filter((i) => !i.pull_request).map((i) => this.mapIssue(i));
   }
 
-  async createIssue(repo: string, input: CreateIssueInput): Promise<ForgeIssue> {
+  async createIssue(repo: string, input: CreateIssueInput): Promise<Issue> {
     const created = await this.req<GhIssue>(issuePath(repo), 'POST', {
       title: input.title,
       body: input.body,
@@ -243,7 +243,7 @@ export class GitHubForge implements Forge {
     return this.mapIssue(created);
   }
 
-  async updateIssue(repo: string, n: number, patch: IssuePatch): Promise<ForgeIssue> {
+  async updateIssue(repo: string, n: number, patch: IssuePatch): Promise<Issue> {
     const body: Record<string, unknown> = {};
     if (patch.title !== undefined) body.title = patch.title;
     if (patch.body !== undefined) body.body = patch.body;
@@ -258,7 +258,7 @@ export class GitHubForge implements Forge {
 
   // -- comentarios ----------------------------------------------------------
 
-  async listComments(repo: string, n: number): Promise<ForgeComment[]> {
+  async listComments(repo: string, n: number): Promise<IssueComment[]> {
     const out = await this.http.requestAll<GhComment>(`${issuePath(repo, n)}/comments`, {
       pageParam: 'per_page',
       cap: 1000,
@@ -276,7 +276,7 @@ export class GitHubForge implements Forge {
 
   // -- dependencias ---------------------------------------------------------
 
-  async listDependencies(repo: string, n: number): Promise<ForgeIssue[]> {
+  async listDependencies(repo: string, n: number): Promise<Issue[]> {
     const out = await this.http.requestAll<GhIssue>(
       `${issuePath(repo, n)}/dependencies/blocked_by`,
       {
@@ -315,7 +315,7 @@ export class GitHubForge implements Forge {
 
   // -- milestones -----------------------------------------------------------
 
-  async listMilestones(repo: string): Promise<ForgeMilestone[]> {
+  async listMilestones(repo: string): Promise<Milestone[]> {
     const out = await this.http.requestAll<GhMilestone>(`/repos/${repo}/milestones?state=all`, {
       pageParam: 'per_page',
       cap: 200,
@@ -326,7 +326,7 @@ export class GitHubForge implements Forge {
   async createMilestone(
     repo: string,
     input: { title: string; description?: string }
-  ): Promise<ForgeMilestone> {
+  ): Promise<Milestone> {
     const created = await this.req<GhMilestone>(`/repos/${repo}/milestones`, 'POST', {
       title: input.title,
       description: input.description,
@@ -338,7 +338,7 @@ export class GitHubForge implements Forge {
     repo: string,
     id: string | number,
     patch: { title?: string; description?: string; state?: 'open' | 'closed' }
-  ): Promise<ForgeMilestone> {
+  ): Promise<Milestone> {
     const body: Record<string, unknown> = {};
     if (patch.title !== undefined) body.title = patch.title;
     if (patch.description !== undefined) body.description = patch.description;
@@ -360,7 +360,7 @@ export class GitHubForge implements Forge {
   async listPulls(
     repo: string,
     opts: { state?: 'open' | 'closed' | 'all'; base?: string; head?: string; limit?: number }
-  ): Promise<ForgePull[]> {
+  ): Promise<Pull[]> {
     const state = opts.state ?? 'open';
     const limit = opts.limit ?? 50;
     let q = `${pullPath(repo)}?state=${state}&per_page=${Math.max(limit, 50)}`;
@@ -370,11 +370,11 @@ export class GitHubForge implements Forge {
     return list.slice(0, limit).map((p) => this.mapPull(p));
   }
 
-  async getPull(repo: string, n: number): Promise<ForgePull> {
+  async getPull(repo: string, n: number): Promise<Pull> {
     return this.mapPull(await this.req<GhPull>(pullPath(repo, n)));
   }
 
-  async listReviews(repo: string, n: number): Promise<ForgeReview[]> {
+  async listReviews(repo: string, n: number): Promise<Review[]> {
     const out = await this.http.requestAll<{
       id: number;
       state?: string;
@@ -393,11 +393,7 @@ export class GitHubForge implements Forge {
     }));
   }
 
-  async listReviewComments(
-    repo: string,
-    n: number,
-    reviewId: number
-  ): Promise<ForgeReviewComment[]> {
+  async listReviewComments(repo: string, n: number, reviewId: number): Promise<ReviewComment[]> {
     // GitHub lista inline de forma plana; filtra pelo review pedido.
     const out = await this.http.requestAll<{
       id: number;
@@ -423,7 +419,7 @@ export class GitHubForge implements Forge {
       }));
   }
 
-  async getChecks(repo: string, sha: string): Promise<ForgeChecks | undefined> {
+  async getChecks(repo: string, sha: string): Promise<Checks | undefined> {
     if (!sha) return undefined;
     const [runs, status] = await Promise.all([
       this.http
@@ -452,7 +448,7 @@ export class GitHubForge implements Forge {
         .catch(() => undefined),
     ]);
 
-    const statuses: ForgeChecks['statuses'] = [];
+    const statuses: Checks['statuses'] = [];
     for (const s of status?.statuses ?? []) {
       statuses.push({
         context: s.context,
@@ -486,7 +482,7 @@ export class GitHubForge implements Forge {
     return { overall, statuses };
   }
 
-  async createPull(repo: string, input: CreatePullInput): Promise<ForgePull> {
+  async createPull(repo: string, input: CreatePullInput): Promise<Pull> {
     const created = await this.req<GhPull>(pullPath(repo), 'POST', {
       head: input.head,
       base: input.base,
@@ -497,7 +493,7 @@ export class GitHubForge implements Forge {
     return this.mapPull(created);
   }
 
-  async getPullFiles(repo: string, n: number): Promise<ForgePullFile[]> {
+  async getPullFiles(repo: string, n: number): Promise<PullFile[]> {
     const out = await this.req<
       {
         filename: string;
@@ -540,7 +536,7 @@ export class GitHubForge implements Forge {
 
   // -- pipeline -------------------------------------------------------------
 
-  async listRuns(repo: string, opts: ListRunsOptions): Promise<ForgeRun[]> {
+  async listRuns(repo: string, opts: ListRunsOptions): Promise<Run[]> {
     const limit = opts.limit ?? 10;
     let q = `/repos/${repo}/actions/runs?per_page=${Math.min(Math.max(limit, 20), 100)}`;
     if (opts.branch) q += `&branch=${encodeURIComponent(opts.branch)}`;
@@ -551,7 +547,7 @@ export class GitHubForge implements Forge {
     return runs.slice(0, limit).map((r) => this.mapRun(r));
   }
 
-  async getRun(repo: string, id: number): Promise<ForgeRun> {
+  async getRun(repo: string, id: number): Promise<Run> {
     return this.mapRun(await this.req<GhRun>(`/repos/${repo}/actions/runs/${id}`));
   }
 
@@ -587,7 +583,7 @@ export class GitHubForge implements Forge {
     return shapeLog(parts.join('\n'), opts);
   }
 
-  async getActionsConfig(repo: string): Promise<ForgeActionsConfig> {
+  async getActionsConfig(repo: string): Promise<ActionsConfig> {
     const [vars, secrets, wf] = await Promise.all([
       this.http
         .request<{ variables?: { name: string; value?: string }[] }>(
@@ -644,7 +640,7 @@ export class GitHubForge implements Forge {
     );
   }
 
-  async listRunners(repo: string): Promise<ForgeRunner[]> {
+  async listRunners(repo: string): Promise<Runner[]> {
     const data = await this.req<{
       runners?: {
         id: number;
@@ -665,7 +661,7 @@ export class GitHubForge implements Forge {
 
   // -- branches -------------------------------------------------------------
 
-  async listBranches(repo: string): Promise<ForgeBranch[]> {
+  async listBranches(repo: string): Promise<Branch[]> {
     const out = await this.http.requestAll<{ name: string; protected?: boolean }>(
       `/repos/${repo}/branches`,
       { pageParam: 'per_page', cap: 300 }
@@ -673,8 +669,8 @@ export class GitHubForge implements Forge {
     return out.map((b) => ({ name: b.name, protected: Boolean(b.protected) }));
   }
 
-  async getBranchProtections(repo: string, branches: string[]): Promise<ForgeProtection[]> {
-    const out: ForgeProtection[] = [];
+  async getBranchProtections(repo: string, branches: string[]): Promise<Protection[]> {
+    const out: Protection[] = [];
     for (const branch of branches) {
       try {
         const p = await this.req<{
@@ -700,7 +696,7 @@ export class GitHubForge implements Forge {
         ];
         out.push({ branch, summary: bits.join(', '), raw: p });
       } catch (e) {
-        if (e instanceof ForgeError && e.status === 404) {
+        if (e instanceof GitHostError && e.status === 404) {
           out.push({ branch, summary: 'sem protecao' });
           continue;
         }
@@ -710,7 +706,7 @@ export class GitHubForge implements Forge {
     return out;
   }
 
-  async compare(repo: string, base: string, head: string): Promise<ForgeCompare> {
+  async compare(repo: string, base: string, head: string): Promise<Compare> {
     const data = await this.req<{
       ahead_by?: number;
       behind_by?: number;
@@ -720,7 +716,7 @@ export class GitHubForge implements Forge {
     return {
       ahead: data.ahead_by ?? 0,
       behind: data.behind_by ?? 0,
-      status: (data.status as ForgeCompare['status']) ?? 'identical',
+      status: (data.status as Compare['status']) ?? 'identical',
       commits: (data.commits ?? []).map((c) => ({
         sha: c.sha,
         message: (c.commit?.message ?? '').split('\n')[0],

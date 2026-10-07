@@ -5,10 +5,10 @@ import { clearBinding, writeBinding } from '../core/binding';
 import { classify, dateField, fmtComment, fmtIssue, priorityOf } from '../core/format';
 import { findMilestone, inMilestone, milestoneQueue, type Deps } from '../core/milestone';
 import { buildBody, listTemplates, loadTemplate } from '../core/template';
-import type { ForgeIssue, ForgeMilestone } from '../providers/types';
+import type { Issue, Milestone } from '../providers/types';
 
 /**
- * Tools de issue e marco. Todas falam so com a interface `Forge` e resolvem o
+ * Tools de issue e marco. Todas falam so com a interface `GitHost` e resolvem o
  * repo pela ordem: argumento, vinculo da sessao, ambiente ou clone.
  */
 
@@ -45,14 +45,14 @@ function target(
   return { repo, n };
 }
 
-async function milestoneDeps(ctx: Ctx, repo: string, items: ForgeIssue[]): Promise<Deps> {
+async function milestoneDeps(ctx: Ctx, repo: string, items: Issue[]): Promise<Deps> {
   const inside = new Map<number, number[]>();
   const outside = new Map<number, number[]>();
   const byNumber = new Set(items.map((i) => i.number));
   await Promise.all(
     items.map(async (i) => {
       // Provider sem suporte a dependencia nativa nao pode derrubar a fila.
-      const all = await ctx.forge.listDependencies(repo, i.number).catch(() => [] as ForgeIssue[]);
+      const all = await ctx.host.listDependencies(repo, i.number).catch(() => [] as Issue[]);
       inside.set(
         i.number,
         all.filter((d) => byNumber.has(d.number)).map((d) => d.number)
@@ -86,7 +86,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         const repo = pickRepo(ctx, args.repo);
         const n = parseRef(args.issue);
         if (!Number.isFinite(n)) throw new Error(`issue invalida: ${args.issue}`);
-        const issue = await ctx.forge.getIssue(repo, n);
+        const issue = await ctx.host.getIssue(repo, n);
         const milestone = args.milestone ?? issue.milestone?.title;
         const file = writeBinding(directory, toolCtx.sessionID, {
           repo,
@@ -118,7 +118,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         const b = bindingOf(directory, toolCtx.sessionID);
         if (!b) return 'Nenhuma issue vinculada nesta sessao.';
         const issue = b.issue
-          ? await ctx.forge.getIssue(b.repo, b.issue).catch(() => undefined)
+          ? await ctx.host.getIssue(b.repo, b.issue).catch(() => undefined)
           : undefined;
         return [
           `repo=${b.repo} issue=${b.issue ?? '-'} marco=${b.milestone ?? '-'} desde=${b.boundAt}`,
@@ -144,10 +144,10 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
       },
       async execute(args, toolCtx) {
         const { repo, n } = target(ctx, directory, args, toolCtx.sessionID);
-        const issue = await ctx.forge.getIssue(repo, n);
+        const issue = await ctx.host.getIssue(repo, n);
         const out = [fmtIssue(issue)];
 
-        const deps = await ctx.forge.listDependencies(repo, n).catch(() => [] as ForgeIssue[]);
+        const deps = await ctx.host.listDependencies(repo, n).catch(() => [] as Issue[]);
         out.push(
           deps.length
             ? `  depende de (${deps.length}) - ${deps
@@ -162,7 +162,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         out.push('', '--- corpo ---', issue.body ?? '(vazio)');
 
         if (args.comments !== 0) {
-          const all = await ctx.forge.listComments(repo, n);
+          const all = await ctx.host.listComments(repo, n);
           const shown = args.comments && args.comments > 0 ? all.slice(-args.comments) : all;
           out.push('', `--- comentarios (${all.length}) ---`);
           if (all.length && all.length < (issue.comments ?? 0)) {
@@ -215,7 +215,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         const [untilDay, untilKind = 'created'] = (args.until ?? '').split(':');
 
         const one = async (repo: string) => {
-          let items = await ctx.forge.listIssues(repo, state);
+          let items = await ctx.host.listIssues(repo, state);
           if (args.milestone) items = items.filter((i) => inMilestone(i, args.milestone!));
           if (args.filter) items = items.filter((i) => classify(i) === args.filter);
           if (args.author) {
@@ -240,7 +240,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
           return { repo, items };
         };
 
-        const sorted = (items: ForgeIssue[]) =>
+        const sorted = (items: Issue[]) =>
           items.sort((a, b) => priorityOf(a) - priorityOf(b) || a.number - b.number);
 
         // Repo unico quando veio argumento ou quando existe padrao. So varre a
@@ -252,7 +252,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
           const blocks: string[] = [];
           let total = 0;
           for (const repo of repos) {
-            const { items } = await one(repo).catch(() => ({ repo, items: [] as ForgeIssue[] }));
+            const { items } = await one(repo).catch(() => ({ repo, items: [] as Issue[] }));
             if (!items.length) continue;
             total += items.length;
             const header = `${repo} ${'-'.repeat(Math.max(0, 44 - repo.length))}`;
@@ -300,7 +300,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
 
     issue_create: tool({
       description:
-        'Cria uma issue (task) no repo. Com `template` e sem `body`, monta o corpo a partir dos campos. `depende` grava as dependencias na secao de dependencias da API do forge, que e o que o `milestone_view` le para montar a fila. O texto passa pela checagem de prosa: travessao, ponto e virgula e frases de formula sao recusados.',
+        'Cria uma issue (task) no repo. Com `template` e sem `body`, monta o corpo a partir dos campos. `depende` grava as dependencias na secao de dependencias da API, que e o que o `milestone_view` le para montar a fila. O texto passa pela checagem de prosa: travessao, ponto e virgula e frases de formula sao recusados.',
       args: {
         title: tool.schema.string(),
         body: tool.schema
@@ -362,24 +362,24 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         }
 
         const warn = assertProse(body, 'corpo da issue', ctx.config.prose);
-        const created = await ctx.forge.createIssue(repo, { title, body, labels: labels ?? [] });
+        const created = await ctx.host.createIssue(repo, { title, body, labels: labels ?? [] });
 
         if (args.milestone) {
-          const all = await ctx.forge.listMilestones(repo);
+          const all = await ctx.host.listMilestones(repo);
           const ms = findMilestone(all, args.milestone, repo);
-          await ctx.forge.setIssueMilestone(repo, created.number, ms.id);
+          await ctx.host.setIssueMilestone(repo, created.number, ms.id);
         }
 
         // Dependencias vao pela API, nao por texto no corpo: e o que a UI
         // mostra e o que o `milestone_view` le.
         const blockers = parseRefs(args.depende);
-        if (blockers.length) await ctx.forge.addDependencies(repo, created.number, blockers);
+        if (blockers.length) await ctx.host.addDependencies(repo, created.number, blockers);
 
         ctx.notify(`Issue criada: ${repo}#${created.number}`, 'success');
-        const saved = await ctx.forge
+        const saved = await ctx.host
           .listDependencies(repo, created.number)
-          .catch(() => [] as ForgeIssue[]);
-        const after = await ctx.forge.getIssue(repo, created.number);
+          .catch(() => [] as Issue[]);
+        const after = await ctx.host.getIssue(repo, created.number);
         return [
           `Criada a partir de ${args.template ? `template "${args.template}"` : 'body literal'}.`,
           fmtIssue(after),
@@ -398,7 +398,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
 
     issue_depend: tool({
       description:
-        'Gerencia as dependencias de uma issue, as mesmas da secao Dependencias da UI do forge. `add` faz a issue esperar pelas citadas, `remove` tira a aresta. E o que o `milestone_view` le para montar a fila do marco, entao nao escreva dependencias como texto no corpo.',
+        'Gerencia as dependencias de uma issue, as mesmas da secao Dependencias da UI. `add` faz a issue esperar pelas citadas, `remove` tira a aresta. E o que o `milestone_view` le para montar a fila do marco, entao nao escreva dependencias como texto no corpo.',
       args: {
         issue: issueArg,
         add: tool.schema
@@ -417,10 +417,10 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         const rm = parseRefs(args.remove);
         if (!add.length && !rm.length) throw new Error('informe `add` e/ou `remove`.');
 
-        if (add.length) await ctx.forge.addDependencies(repo, n, add);
-        for (const b of rm) await ctx.forge.removeDependency(repo, n, b);
+        if (add.length) await ctx.host.addDependencies(repo, n, add);
+        for (const b of rm) await ctx.host.removeDependency(repo, n, b);
 
-        const after = await ctx.forge.listDependencies(repo, n).catch(() => [] as ForgeIssue[]);
+        const after = await ctx.host.listDependencies(repo, n).catch(() => [] as Issue[]);
         return [
           `#${n} - dependencias:`,
           ...(after.length
@@ -449,7 +449,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
       async execute(args, toolCtx) {
         const { repo, n } = target(ctx, directory, args, toolCtx.sessionID);
         const warn = assertProse(args.body, 'comentario da issue', ctx.config.prose);
-        await ctx.forge.createComment(repo, n, args.body);
+        await ctx.host.createComment(repo, n, args.body);
         return [`Comentario publicado em ${repo}#${n}.`, warn].filter(Boolean).join('\n');
       },
     }),
@@ -474,7 +474,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         if (args.body !== undefined) patch.body = args.body;
 
         if (args.add_labels?.length || args.remove_labels?.length) {
-          const cur = await ctx.forge.getIssue(repo, n);
+          const cur = await ctx.host.getIssue(repo, n);
           const next = new Set(cur.labels);
           for (const l of args.remove_labels ?? []) next.delete(l);
           for (const l of args.add_labels ?? []) next.add(l);
@@ -489,7 +489,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
         }
 
         if (!Object.keys(patch).length) throw new Error('nada para atualizar.');
-        const after = await ctx.forge.updateIssue(repo, n, patch);
+        const after = await ctx.host.updateIssue(repo, n, patch);
         return [`Atualizado:\n${fmtIssue(after)}`, warn].filter(Boolean).join('\n');
       },
     }),
@@ -512,8 +512,8 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
       async execute(args, toolCtx) {
         const { repo, n } = target(ctx, directory, args, toolCtx.sessionID);
         const warn = assertProse(args.comment, 'comentario de fechamento', ctx.config.prose);
-        if (args.comment) await ctx.forge.createComment(repo, n, args.comment);
-        await ctx.forge.updateIssue(repo, n, {
+        if (args.comment) await ctx.host.createComment(repo, n, args.comment);
+        await ctx.host.updateIssue(repo, n, {
           state: 'closed',
           stateReason: args.state_reason ?? 'completed',
         });
@@ -527,7 +527,7 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
       args: { issue: tool.schema.string().optional(), repo: repoArgHere },
       async execute(args, toolCtx) {
         const { repo, n } = target(ctx, directory, args, toolCtx.sessionID);
-        await ctx.forge.updateIssue(repo, n, { state: 'open' });
+        await ctx.host.updateIssue(repo, n, { state: 'open' });
         return `${repo}#${n} reaberta.`;
       },
     }),
@@ -548,9 +548,9 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
       async execute(args) {
         const repo = resolve(args.repo);
         const state = args.state ?? 'open';
-        const all = await ctx.forge.listMilestones(repo);
+        const all = await ctx.host.listMilestones(repo);
         const ms = findMilestone(all, args.milestone, repo);
-        const items = (await ctx.forge.listIssues(repo, state)).filter((i) =>
+        const items = (await ctx.host.listIssues(repo, state)).filter((i) =>
           inMilestone(i, String(ms.id))
         );
         if (!items.length) return `${repo} marco #${ms.id} ${ms.title} sem issues ${state}.`;
@@ -574,13 +574,13 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
       },
       async execute(args) {
         const repo = resolve(args.repo);
-        const all = await ctx.forge.listMilestones(repo);
+        const all = await ctx.host.listMilestones(repo);
         const items = args.milestone
           ? [findMilestone(all, args.milestone, repo)]
           : all.filter((m) => !args.state || m.state === args.state);
         if (!items.length) return `Nenhum marco ${args.state ?? 'aberto'} em ${repo}.`;
         return items
-          .map((m: ForgeMilestone) => {
+          .map((m: Milestone) => {
             const total = m.openIssues + m.closedIssues;
             const pct = total ? Math.round((m.closedIssues / total) * 100) : 0;
             return [
@@ -609,11 +609,11 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
       async execute(args) {
         const warn = assertProse(args.description, 'descricao do marco', ctx.config.prose);
         const repo = resolve(args.repo);
-        const dupe = (await ctx.forge.listMilestones(repo)).find(
+        const dupe = (await ctx.host.listMilestones(repo)).find(
           (m) => m.title.toLowerCase() === args.title.toLowerCase()
         );
         if (dupe) throw new Error(`marco ja existe em ${repo}: #${dupe.id} ${dupe.title}`);
-        const created = await ctx.forge.createMilestone(repo, {
+        const created = await ctx.host.createMilestone(repo, {
           title: args.title,
           description: args.description,
         });
@@ -636,14 +636,14 @@ export function issueTools({ ctx, directory }: IssueToolsInput): Record<string, 
       async execute(args) {
         const warn = assertProse(args.description, 'descricao do marco', ctx.config.prose);
         const repo = resolve(args.repo);
-        const all = await ctx.forge.listMilestones(repo);
+        const all = await ctx.host.listMilestones(repo);
         const ms = findMilestone(all, args.milestone, repo);
         const patch: { title?: string; description?: string; state?: 'open' | 'closed' } = {};
         if (args.title) patch.title = args.title;
         if (args.description !== undefined) patch.description = args.description;
         if (args.state) patch.state = args.state;
         if (!Object.keys(patch).length) throw new Error('nada para atualizar.');
-        const after = await ctx.forge.updateMilestone(repo, ms.id, patch);
+        const after = await ctx.host.updateMilestone(repo, ms.id, patch);
         return [`Marco atualizado: #${after.id} [${after.state}] ${after.title}`, warn]
           .filter(Boolean)
           .join('\n');

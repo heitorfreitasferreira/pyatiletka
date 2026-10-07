@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import type { ToolContext } from '@opencode-ai/plugin';
 import { filterDiffByPath, fmtPR, pullTools, statusOf, tailLines } from './pulls';
 import type { Ctx } from '../core/context';
-import { FakeForge } from '../testing/fake-forge';
+import { FakeGitHost } from '../testing/fake-git-host';
 import { makeComment, makeConfig, REPO } from '../testing/fixtures';
-import type { ForgePull } from '../providers/types';
+import type { Pull } from '../providers/types';
 
-let forge: FakeForge;
+let host: FakeGitHost;
 let tools: Record<string, { execute: (a: unknown, c: ToolContext) => Promise<unknown> }>;
 const toasts: { message: string; variant: string }[] = [];
 
@@ -21,9 +21,9 @@ const toolCtx = {
   ask: async () => {},
 } as unknown as ToolContext;
 
-function ctxFor(f: FakeForge, over: Partial<Ctx['config']> = {}): Ctx {
+function ctxFor(f: FakeGitHost, over: Partial<Ctx['config']> = {}): Ctx {
   return {
-    forge: f,
+    host: f,
     config: makeConfig(over),
     remote: REPO,
     defaultRepo: REPO,
@@ -46,7 +46,7 @@ async function runFail(name: string, args: unknown = {}): Promise<string> {
   throw new Error(`${name} nao lancou erro`);
 }
 
-const pull = (over: Partial<ForgePull> = {}): ForgePull => ({
+const pull = (over: Partial<Pull> = {}): Pull => ({
   number: 1,
   title: 'Corrige a fila',
   state: 'open',
@@ -62,7 +62,7 @@ const pull = (over: Partial<ForgePull> = {}): ForgePull => ({
 
 beforeEach(() => {
   toasts.length = 0;
-  forge = new FakeForge({
+  host = new FakeGitHost({
     pulls: [
       pull({ number: 1, headSha: 'aaaa1111', headRef: 'feat/fila', body: 'corpo do PR' }),
       // #2 exercita a porta de draft, #3 a de CI em falha, #4 o conflito,
@@ -131,7 +131,7 @@ beforeEach(() => {
     },
     repos: [REPO, 'org/outro'],
   });
-  tools = pullTools({ ctx: ctxFor(forge) }) as never;
+  tools = pullTools({ ctx: ctxFor(host) }) as never;
 });
 
 describe('statusOf', () => {
@@ -198,7 +198,7 @@ describe('pr_list', () => {
   });
 
   it('mine sem PYATILETKA_LOGIN explica o que falta', async () => {
-    tools = pullTools({ ctx: ctxFor(forge, { login: undefined }) }) as never;
+    tools = pullTools({ ctx: ctxFor(host, { login: undefined }) }) as never;
     expect(await runFail('pr_list', { mine: true })).toContain('PYATILETKA_LOGIN');
   });
 
@@ -208,7 +208,7 @@ describe('pr_list', () => {
   });
 
   it('repo sem PR aberto diz isso', async () => {
-    forge.state.pulls = [];
+    host.state.pulls = [];
     expect(await run('pr_list')).toContain('Nenhum PR open');
   });
 });
@@ -230,7 +230,7 @@ describe('pr_view', () => {
   });
 
   it('dessconta os reviews do total esperado de comentarios', async () => {
-    forge.state.pulls[0].comments = 5;
+    host.state.pulls[0].comments = 5;
     expect(await run('pr_view', { pr: '1' })).toContain('a API devolveu 1 de 4 comentarios');
   });
 
@@ -247,7 +247,7 @@ describe('pr_checks', () => {
   });
 
   it('sem check, libera', async () => {
-    forge.state.checks = {};
+    host.state.checks = {};
     expect(await run('pr_checks', { pr: '1' })).toContain('Merge liberado');
   });
 });
@@ -306,7 +306,7 @@ describe('filterDiffByPath e tailLines', () => {
 describe('pr_create', () => {
   it('abre com head, base e title', async () => {
     const out = await run('pr_create', { head: 'feat/x', base: 'main', title: 'Nova coisa' });
-    expect(forge.called('createPull')[0]?.args[1]).toMatchObject({
+    expect(host.called('createPull')[0]?.args[1]).toMatchObject({
       head: 'feat/x',
       base: 'main',
       title: 'Nova coisa',
@@ -322,14 +322,14 @@ describe('pr_create', () => {
       body: 'muda tudo — rapido',
     });
     expect(out).toContain('NAO foi gravado');
-    expect(forge.called('createPull')).toHaveLength(0);
+    expect(host.called('createPull')).toHaveLength(0);
   });
 });
 
 describe('pr_merge', () => {
   it('mergeia com CI verde e default fast-forward-only', async () => {
     const out = await run('pr_merge', { pr: '1' });
-    expect(forge.called('mergePull')[0]?.args.slice(2)).toEqual([
+    expect(host.called('mergePull')[0]?.args.slice(2)).toEqual([
       'fast-forward-only',
       { deleteBranch: false },
     ]);
@@ -338,19 +338,19 @@ describe('pr_merge', () => {
 
   it('propaga delete_branch e o estilo pedido', async () => {
     await run('pr_merge', { pr: '1', style: 'squash', delete_branch: true });
-    expect(forge.called('mergePull')[0]?.args.slice(2)).toEqual(['squash', { deleteBranch: true }]);
+    expect(host.called('mergePull')[0]?.args.slice(2)).toEqual(['squash', { deleteBranch: true }]);
   });
 
   it('CI pendente recusa e aponta o caminho', async () => {
     const out = await runFail('pr_merge', { pr: '3' });
     expect(out).toContain('CI nao verde');
     expect(out).toContain('ci_wait');
-    expect(forge.called('mergePull')).toHaveLength(0);
+    expect(host.called('mergePull')).toHaveLength(0);
   });
 
   it('force passa pela porta', async () => {
     await run('pr_merge', { pr: '3', force: true });
-    expect(forge.called('mergePull')).toHaveLength(1);
+    expect(host.called('mergePull')).toHaveLength(1);
   });
 
   it('draft recusa sem force', async () => {
@@ -361,30 +361,30 @@ describe('pr_merge', () => {
   it('conflito recusa mesmo com force', async () => {
     const out = await runFail('pr_merge', { pr: '4', force: true });
     expect(out).toContain('conflito');
-    expect(forge.called('mergePull')).toHaveLength(0);
+    expect(host.called('mergePull')).toHaveLength(0);
   });
 
   it('PR ja merged nao mergeia de novo', async () => {
     expect(await run('pr_merge', { pr: '5' })).toContain('ja foi merged');
-    expect(forge.called('mergePull')).toHaveLength(0);
+    expect(host.called('mergePull')).toHaveLength(0);
   });
 
   it('sem check de CI, mergeia', async () => {
-    forge.state.checks = {};
+    host.state.checks = {};
     await run('pr_merge', { pr: '1' });
-    expect(forge.called('mergePull')).toHaveLength(1);
+    expect(host.called('mergePull')).toHaveLength(1);
   });
 });
 
 describe('pr_comment', () => {
   it('publica na conversa do PR', async () => {
     await run('pr_comment', { pr: '1', body: 'ajustei' });
-    expect(forge.called('createComment')[0]?.args).toEqual([REPO, 1, 'ajustei']);
+    expect(host.called('createComment')[0]?.args).toEqual([REPO, 1, 'ajustei']);
   });
 
   it('texto com ponto e virgula bloqueia', async () => {
     expect(await runFail('pr_comment', { pr: '1', body: 'um; dois' })).toContain('ponto e virgula');
-    expect(forge.called('createComment')).toHaveLength(0);
+    expect(host.called('createComment')).toHaveLength(0);
   });
 });
 
@@ -401,7 +401,7 @@ describe('pr_batch', () => {
   });
 
   it('repo com erro nao derruba os outros', async () => {
-    forge.fail.set('listPulls', new Error('sem acesso'));
+    host.fail.set('listPulls', new Error('sem acesso'));
     const out = await run('pr_batch', { repos: ['*'], branch: 'feat/fila' });
     expect(out).toContain('sem acesso');
   });

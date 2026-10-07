@@ -5,14 +5,14 @@ import type { Config, ProviderName } from '../config';
  * paginacao. Erros carregam status para quem chama decidir (404, 401, 500).
  */
 
-export class ForgeError extends Error {
+export class GitHostError extends Error {
   constructor(
     readonly status: number,
     readonly path: string,
     readonly body: string
   ) {
-    super(`Forge ${status} ${path}: ${body.slice(0, 400)}`);
-    this.name = 'ForgeError';
+    super(`GitHost ${status} ${path}: ${body.slice(0, 400)}`);
+    this.name = 'GitHostError';
   }
 }
 
@@ -85,7 +85,7 @@ export class Http {
       if (res.ok) return res.text();
 
       const errBody = this.redact(await res.text());
-      const err = new ForgeError(res.status, path, errBody);
+      const err = new GitHostError(res.status, path, errBody);
       if (RETRY_STATUS.has(res.status) && attempt < retries) {
         lastErr = err;
         await sleep(700 * 2 ** attempt);
