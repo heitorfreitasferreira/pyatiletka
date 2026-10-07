@@ -181,4 +181,5 @@ export { ConfigError, loadConfig, resolveProvider, DEFAULT_PROMOTE_ORDER } from 
 export { assertProse, lintProse, type ProseMode, type SlopHit } from './prose';
 export { parseRemote, resolveRepo, type ResolvedRepo } from './repo';
 export { createGitHost } from './providers';
+export { VERSION } from './version';
 export type * from './providers/types';
