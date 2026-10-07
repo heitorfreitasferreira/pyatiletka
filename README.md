@@ -94,6 +94,10 @@ nomes precisam existir no repo.
 `issue_update` trata a familia `Status/` como exclusiva: adicionar um `Status/`
 novo substitui o anterior.
 
+O GitHub tem consistencia eventual na listagem de issues: logo depois de
+`issue_create`, um `milestone_view` pode mostrar a fila curta por alguns
+segundos. Repita a chamada.
+
 Dependencias vao pela secao de dependencias da API do forge, a mesma da UI, via
 `issue_depend`. `milestone_view` le essa secao para montar a fila. Escrever
 dependencia como texto no corpo nao cria aresta.
@@ -225,6 +229,10 @@ execucao esperar: informe `PYATILETKA_DEFAULT_BRANCH` se quiser um padrao.
 
 `branch_promote` e `commit_list` usam o git local e precisam do clone no
 workspace. As outras duas falam com o forge e funcionam sem clone.
+
+`branch_promote` cria a branch de destino quando ela ainda nao existe, e
+`branch_compare` recusa com o nome da branch que falta. Nos dois o compare 404
+quando uma ref nao existe, e o forge nao diz qual delas.
 
 A ordem de promocao vem de `PYATILETKA_PROMOTE_ORDER` e o padrao e
 `staging,production`:

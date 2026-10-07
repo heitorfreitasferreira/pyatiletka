@@ -5,6 +5,9 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { ToolContext } from '@opencode-ai/plugin';
 import { branchTools, compareVerdict } from './branches';
+
+/** Assercao de substring, para as mensagens de recusa ficarem legiveis. */
+const contains = (haystack: string, needle: string) => expect(haystack).toContain(needle);
 import { DEFAULT_PROMOTE_ORDER } from '../config';
 import type { Ctx } from '../core/context';
 import { cmp, FakeForge } from '../testing/fake-forge';
@@ -208,6 +211,24 @@ describe('branch_compare', () => {
   });
 });
 
+describe('branch_compare com ref inexistente', () => {
+  it('nomeia a branch que falta e lista as que existem', async () => {
+    const out = await runFail('branch_compare', { base: 'nao-existe', head: 'main' });
+    contains(out, 'branch base "nao-existe" nao existe');
+    contains(out, 'staging, production');
+  });
+
+  it('confere o head tambem', async () => {
+    const out = await runFail('branch_compare', { base: 'main', head: 'nao-existe' });
+    contains(out, 'branch head "nao-existe" nao existe');
+  });
+
+  it('nao chama o compare quando a ref falta', async () => {
+    await runFail('branch_compare', { base: 'nao-existe', head: 'main' });
+    expect(forge.called('compare')).toHaveLength(0);
+  });
+});
+
 describe('branch_promote', () => {
   it('branch fora da ordem e recusada', async () => {
     expect(await runFail('branch_promote', { from: 'main' })).toContain('PYATILETKA_PROMOTE_ORDER');
@@ -267,6 +288,35 @@ describe('branch_promote', () => {
     );
     tools = build(forge, ['main', 'staging']) as never;
     expect(await run('branch_promote', { from: 'main' })).toContain('promocao main -> [staging]');
+  });
+
+  it('destino que nao existe: o push cria a branch', async () => {
+    forge.state.branches = [
+      { name: 'main', protected: true },
+      { name: 'staging', protected: true },
+    ];
+    tools = build(forge, ['staging', 'nova-producao']) as never;
+    const out = await run('branch_promote', { from: 'staging', dry_run: true });
+    contains(out, 'destino nao existe, o push criaria a branch');
+    contains(out, 'staging -> nova-producao');
+  });
+
+  it('destino novo com dry_run nao tenta comparar nem fazer push', async () => {
+    forge.state.branches = [
+      { name: 'main', protected: true },
+      { name: 'staging', protected: true },
+    ];
+    tools = build(forge, ['staging', 'nova-producao']) as never;
+    await run('branch_promote', { from: 'staging', dry_run: true });
+    // O compare 404 quando a ref base nao existe; nao chega a ser chamado.
+    expect(forge.called('compare')).toHaveLength(0);
+  });
+
+  it('origem que nao existe e recusada com o nome dela', async () => {
+    forge.state.branches = [{ name: 'main', protected: true }];
+    tools = build(forge, ['fantasma', 'staging']) as never;
+    const out = await runFail('branch_promote', { from: 'fantasma' });
+    contains(out, 'branch de origem "fantasma" nao existe');
   });
 
   it('sem clone local, diz o comando para rodar na mao', async () => {

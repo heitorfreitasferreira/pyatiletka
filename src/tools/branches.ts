@@ -154,6 +154,23 @@ export function branchTools({
       },
       async execute(args) {
         const repo = resolve(args.repo);
+        // O compare 404 quando qualquer uma das refs nao existe, e o forge nao
+        // diz qual. Listar antes transforma um 404 opaco em "esta branch nao
+        // existe" e ainda oferece a lista do que existe.
+        const existentes = new Set(
+          (await ctx.forge.listBranches(repo).catch(() => [])).map((b) => b.name)
+        );
+        for (const [papel, nome] of [
+          ['base', args.base],
+          ['head', args.head],
+        ] as const) {
+          if (existentes.size && !existentes.has(nome)) {
+            throw new Error(
+              `branch ${papel} "${nome}" nao existe em ${repo}. Disponiveis: ${[...existentes].join(', ')}`
+            );
+          }
+        }
+
         const cmp = await ctx.forge.compare(repo, args.base, args.head);
         const prs = await ctx.forge
           .listPulls(repo, { state: 'open', head: args.head, limit: 50 })
@@ -231,9 +248,61 @@ export function branchTools({
         const report: string[] = [];
         const pushed: string[] = [];
 
+        // O compare 404 quando a ref base nao existe, e a mensagem do forge nao
+        // diz qual dos dois lados sumiu. Saber quais branches existem separa
+        // "destino novo" de "origem apagada", que nao tem o mesmo conserto.
+        const existentes = new Set(
+          (await ctx.forge.listBranches(repo).catch(() => [])).map((b) => b.name)
+        );
+
+        /** Fetch e push de `from` para `to`. `ahead` e null quando e criacao. */
+        const doPush = async (to: string, ahead: number | null): Promise<void> => {
+          const clone = findClone(directory, repo);
+          if (!clone) {
+            report.push(
+              `  ${args.from} -> ${to}: SEM CLONE LOCAL de ${repo}. Faca na mao: git -C <repo> push origin ${args.from}:${to}`
+            );
+            return;
+          }
+          const fetch = await git(clone, ['fetch', 'origin', '--prune', '--quiet']);
+          if (fetch.code !== 0) {
+            report.push(
+              `  ${args.from} -> ${to}: fetch falhou (${fetch.err.trim().slice(0, 120)})`
+            );
+            return;
+          }
+          const push = await git(clone, ['push', 'origin', `${args.from}:${to}`]);
+          if (push.code !== 0) {
+            const first = (push.err || push.out).trim().split('\n')[0]?.slice(0, 160) ?? '';
+            report.push(`  ${args.from} -> ${to}: push falhou (${first})`);
+            return;
+          }
+          pushed.push(to);
+          report.push(
+            ahead === null
+              ? `  ${args.from} -> ${to}: branch criada (o destino nao existia)`
+              : `  ${args.from} -> ${to}: ${ahead} commit(s) propagados (push fast-forward)`
+          );
+        };
+
         for (const to of targets) {
+          if (!existentes.has(args.from)) {
+            throw new Error(`branch de origem "${args.from}" nao existe em ${repo}.`);
+          }
+
+          // Destino novo nao tem compare: e o proprio push que cria a branch.
+          if (!existentes.has(to)) {
+            if (args.dry_run) {
+              report.push(
+                `  ${args.from} -> ${to}: destino nao existe, o push criaria a branch [dry-run]`
+              );
+              continue;
+            }
+            await doPush(to, null);
+            continue;
+          }
+
           const cmp = await ctx.forge.compare(repo, to, args.from).catch((e: unknown) => {
-            // Nem todo repo tem todas as branches da ordem. Pular e continuar.
             report.push(
               `  ${args.from} -> ${to}: pulado (${e instanceof Error ? e.message : String(e)})`
             );
@@ -256,30 +325,7 @@ export function branchTools({
             continue;
           }
 
-          const clone = findClone(directory, repo);
-          if (!clone) {
-            report.push(
-              `  ${args.from} -> ${to}: SEM CLONE LOCAL de ${repo}. Faca na mao: git -C <repo> push origin ${args.from}:${to}`
-            );
-            continue;
-          }
-          const fetch = await git(clone, ['fetch', 'origin', '--prune', '--quiet']);
-          if (fetch.code !== 0) {
-            report.push(
-              `  ${args.from} -> ${to}: fetch falhou (${fetch.err.trim().slice(0, 120)})`
-            );
-            continue;
-          }
-          const push = await git(clone, ['push', 'origin', `${args.from}:${to}`]);
-          if (push.code === 0) {
-            pushed.push(to);
-            report.push(
-              `  ${args.from} -> ${to}: ${cmp.ahead} commit(s) propagados (push fast-forward)`
-            );
-          } else {
-            const first = (push.err || push.out).trim().split('\n')[0]?.slice(0, 160) ?? '';
-            report.push(`  ${args.from} -> ${to}: push falhou (${first})`);
-          }
+          await doPush(to, cmp.ahead);
         }
 
         ctx.notify(
