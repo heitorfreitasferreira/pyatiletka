@@ -6,6 +6,12 @@ import type { ProviderName } from '../config';
  * milestone, nomes vs IDs de label, paginacao e formato de log.
  */
 
+/** Usuario dono do token atual, para o filtro `mine`. */
+export type Viewer = { login: string };
+
+/** Metadados do repo. Hoje so a branch padrao. */
+export type RepoInfo = { defaultBranch?: string };
+
 export type Issue = {
   number: number;
   /** Id interno. GitHub exige para criar dependencia. */
@@ -207,6 +213,10 @@ export interface GitHost {
 
   // -- repo ---------------------------------------------------------------
   listRepos(org: string): Promise<string[]>;
+  /** Usuario dono do token atual. */
+  getViewer(): Promise<Viewer>;
+  /** Metadados do repo (hoje a branch padrao). */
+  getRepo(repo: string): Promise<RepoInfo>;
 
   // -- issues -------------------------------------------------------------
   getIssue(repo: string, n: number): Promise<Issue>;

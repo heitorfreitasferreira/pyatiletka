@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import { matchGlob, normRepo, parseRef, parseRefs } from './context';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createCtx, matchGlob, normRepo, parseRef, parseRefs } from './context';
+import type { Runner } from '../auth';
+
+const noCli: Runner = () => ({ status: 127, stdout: '', stderr: '' });
 
 describe('normRepo', () => {
   it('mantem owner/nome', () => {
@@ -57,5 +64,191 @@ describe('matchGlob', () => {
 
   it('ignora caixa', () => {
     expect(matchGlob('FRETE-API', 'frete-*')).toBe(true);
+  });
+});
+
+describe('createCtx', () => {
+  const withDir = (fn: (dir: string) => void) => {
+    const dir = mkdtempSync(join(tmpdir(), 'pyatiletka-ctx-'));
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('sem credencial, o host explica o que falta na primeira chamada', () => {
+    withDir((dir) => {
+      const ctx = createCtx({
+        directory: dir,
+        client: {},
+        run: noCli,
+        env: {
+          HOME: dir,
+          XDG_CONFIG_HOME: join(dir, '.config'),
+          PYATILETKA_AUTH: 'env',
+          PYATILETKA_PROVIDER: 'gitea',
+          GITEA_URL: 'https://git.test',
+        },
+      });
+      expect(ctx.config.provider).toBe('gitea');
+      expect(ctx.config.token).toBe('');
+      expect(ctx.config.authSource).toBe('none');
+      expect(() => ctx.host.listRepos('org')).toThrow(/Sem credencial/);
+    });
+  });
+
+  it('resolve o token do ambiente e cria o host de verdade', () => {
+    withDir((dir) => {
+      const ctx = createCtx({
+        directory: dir,
+        client: {},
+        run: noCli,
+        env: {
+          HOME: dir,
+          XDG_CONFIG_HOME: join(dir, '.config'),
+          PYATILETKA_AUTH: 'env',
+          PYATILETKA_PROVIDER: 'gitea',
+          GITEA_URL: 'https://git.test',
+          GITEA_TOKEN: 'segredo',
+        },
+      });
+      expect(ctx.config.token).toBe('segredo');
+      expect(ctx.config.authSource).toBe('env');
+      expect(ctx.host.provider).toBe('gitea');
+    });
+  });
+
+  it('deriva org, repo e branch do clone', () => {
+    withDir((dir) => {
+      spawnSync('git', ['init', '-q'], { cwd: dir });
+      spawnSync('git', ['symbolic-ref', 'HEAD', 'refs/heads/main'], { cwd: dir });
+      spawnSync('git', ['remote', 'add', 'origin', 'https://github.com/acme/api.git'], {
+        cwd: dir,
+      });
+
+      const ctx = createCtx({
+        directory: dir,
+        client: {},
+        run: noCli,
+        env: {
+          HOME: dir,
+          XDG_CONFIG_HOME: join(dir, '.config'),
+          PYATILETKA_AUTH: 'env',
+          GITHUB_TOKEN: 't',
+        },
+      });
+
+      expect(ctx.config.provider).toBe('github');
+      expect(ctx.config.org).toBe('acme');
+      expect(ctx.config.defaultRepo).toBe('acme/api');
+      expect(ctx.config.defaultBranch).toBe('main');
+    });
+  });
+
+  it('o ambiente vence a derivacao do clone', () => {
+    withDir((dir) => {
+      spawnSync('git', ['init', '-q'], { cwd: dir });
+      spawnSync('git', ['symbolic-ref', 'HEAD', 'refs/heads/main'], { cwd: dir });
+      spawnSync('git', ['remote', 'add', 'origin', 'https://github.com/acme/api.git'], {
+        cwd: dir,
+      });
+
+      const ctx = createCtx({
+        directory: dir,
+        client: {},
+        run: noCli,
+        env: {
+          HOME: dir,
+          XDG_CONFIG_HOME: join(dir, '.config'),
+          PYATILETKA_AUTH: 'env',
+          GITHUB_TOKEN: 't',
+          PYATILETKA_ORG: 'outra',
+          PYATILETKA_DEFAULT_BRANCH: 'develop',
+        },
+      });
+
+      expect(ctx.config.org).toBe('outra');
+      expect(ctx.config.defaultBranch).toBe('develop');
+    });
+  });
+});
+
+describe('createCtx: credencial e degradacao', () => {
+  const withDir = (fn: (dir: string) => void) => {
+    const dir = mkdtempSync(join(tmpdir(), 'pyatiletka-ctx-'));
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('sem provider nenhum ainda carrega e o host explica na chamada', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pyatiletka-ctx-'));
+    try {
+      const ctx = createCtx({
+        directory: dir,
+        client: {},
+        run: noCli,
+        env: { HOME: dir, XDG_CONFIG_HOME: join(dir, '.config'), PYATILETKA_AUTH: 'env' },
+      });
+      expect(ctx.config.provider).toBeUndefined();
+      expect(ctx.config.authSource).toBe('none');
+      await expect(ctx.host.listRepos('org')).rejects.toThrow(/Nenhum provider/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('o host indisponivel rejeita, entao o .catch de degradacao funciona', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pyatiletka-ctx-'));
+    try {
+      const ctx = createCtx({
+        directory: dir,
+        client: {},
+        run: noCli,
+        env: {
+          HOME: dir,
+          XDG_CONFIG_HOME: join(dir, '.config'),
+          PYATILETKA_AUTH: 'env',
+          PYATILETKA_PROVIDER: 'gitea',
+          GITEA_URL: 'https://git.test',
+        },
+      });
+      expect(ctx.config.token).toBe('');
+      await expect(ctx.host.getRepo('org/repo').catch(() => 'sem-ci')).resolves.toBe('sem-ci');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('o .env do projeto nao troca a base, so o confiavel troca', () => {
+    withDir((dir) => {
+      writeFileSync(
+        join(dir, '.env'),
+        'GITHUB_API_URL=https://evil.example\nGITHUB_TOKEN=do-repo\n'
+      );
+      const homeEnv = join(dir, '.config', 'pyatiletka');
+      mkdirSync(homeEnv, { recursive: true });
+      writeFileSync(join(homeEnv, 'env'), 'GITHUB_API_URL=https://gh.corp/api/v3\n');
+
+      const ctx = createCtx({
+        directory: dir,
+        client: {},
+        run: noCli,
+        env: {
+          HOME: dir,
+          XDG_CONFIG_HOME: join(dir, '.config'),
+          PYATILETKA_AUTH: 'env',
+          PYATILETKA_PROVIDER: 'github',
+          GITHUB_TOKEN: 'do-ambiente',
+        },
+      });
+
+      expect(ctx.config.baseUrl).toBe('https://gh.corp/api/v3');
+      expect(ctx.config.host).toBe('gh.corp');
+      expect(ctx.config.token).toBe('do-ambiente');
+    });
   });
 });

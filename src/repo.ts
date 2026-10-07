@@ -55,3 +55,28 @@ export function resolveRepo(directory: string): ResolvedRepo | undefined {
   if (out.status !== 0) return undefined;
   return resolveRepoFromRemote(out.stdout);
 }
+
+/**
+ * Branch padrao do clone, sem rede. Primeiro o HEAD do `origin`, que e o que o
+ * servidor marcou como padrao ao clonar, depois a branch atual quando o HEAD
+ * esta preso a uma ref. `HEAD` solto em detached nao serve.
+ */
+export function localDefaultBranch(directory: string): string | undefined {
+  const remoteHead = spawnSync('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], {
+    cwd: directory,
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  if (remoteHead.status === 0) {
+    const ref = remoteHead.stdout.trim().replace(/^origin\//, '');
+    if (ref) return ref;
+  }
+
+  const current = spawnSync('git', ['symbolic-ref', '--short', 'HEAD'], {
+    cwd: directory,
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  const branch = current.status === 0 ? current.stdout.trim() : '';
+  return branch && branch !== 'HEAD' ? branch : undefined;
+}

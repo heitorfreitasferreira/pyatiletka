@@ -16,6 +16,7 @@ import type {
   Protection,
   Pull,
   PullFile,
+  RepoInfo,
   Review,
   ReviewComment,
   Run,
@@ -24,6 +25,7 @@ import type {
   ListRunsOptions,
   LogsOptions,
   MergeStyle,
+  Viewer,
 } from './types';
 
 /**
@@ -265,6 +267,18 @@ export class GiteaHost implements GitHost {
       cap: 200,
     });
     return repos.map((r) => `${org}/${r.name}`);
+  }
+
+  async getViewer(): Promise<Viewer> {
+    const u = await this.http.request<{ login: string }>('/user', { pageParam: 'limit' });
+    return { login: u.login };
+  }
+
+  async getRepo(repo: string): Promise<RepoInfo> {
+    const r = await this.http.request<{ default_branch?: string }>(`/repos/${repo}`, {
+      pageParam: 'limit',
+    });
+    return { defaultBranch: r.default_branch ?? undefined };
   }
 
   // -- issues ---------------------------------------------------------------

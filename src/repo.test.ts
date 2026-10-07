@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { detectProvider, parseRemote, resolveRepoFromRemote } from './repo';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { detectProvider, localDefaultBranch, parseRemote, resolveRepoFromRemote } from './repo';
 
 describe('parseRemote', () => {
   it('le HTTPS do GitHub', () => {
@@ -71,5 +75,30 @@ describe('resolveRepoFromRemote', () => {
 
   it('devolve undefined sem remote', () => {
     expect(resolveRepoFromRemote(undefined)).toBeUndefined();
+  });
+});
+
+describe('localDefaultBranch', () => {
+  const withDir = (fn: (dir: string) => void) => {
+    const dir = mkdtempSync(join(tmpdir(), 'pyatiletka-branch-'));
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('sem repo devolve undefined', () => {
+    withDir((dir) => {
+      expect(localDefaultBranch(dir)).toBeUndefined();
+    });
+  });
+
+  it('usa a branch atual quando nao ha origin/HEAD', () => {
+    withDir((dir) => {
+      spawnSync('git', ['init', '-q'], { cwd: dir });
+      spawnSync('git', ['symbolic-ref', 'HEAD', 'refs/heads/trunk'], { cwd: dir });
+      expect(localDefaultBranch(dir)).toBe('trunk');
+    });
   });
 });

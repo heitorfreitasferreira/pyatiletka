@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { describeBody, GitHostError } from './http';
+import { describeBody, GitHostError, Http } from './http';
 
 describe('describeBody', () => {
   it('resume a pagina HTML do proxy pelo titulo', () => {
@@ -50,5 +50,22 @@ describe('GitHostError', () => {
   it('nao engole o corpo JSON do forge', () => {
     const err = new GitHostError(404, '/x', '{"message":"Not Found"}');
     expect(err.message).toContain('{"message":"Not Found"}');
+  });
+});
+
+describe('Http.redact', () => {
+  it('mascara o token em qualquer posicao do texto', () => {
+    const http = new Http('gitea', 'https://git.test', 'segredo');
+    expect(http.redact('erro com segredo no meio')).toBe('erro com ***REDACTED*** no meio');
+  });
+
+  it('mascara a credencial embutida na URL', () => {
+    const http = new Http('github', 'https://api.github.com', 'tok');
+    expect(http.redact('https://user:senha@host/x')).toBe('https://user:***@host/x');
+  });
+
+  it('sem token nao quebra', () => {
+    const http = new Http('gitea', 'https://git.test', '');
+    expect(http.redact('texto normal')).toBe('texto normal');
   });
 });

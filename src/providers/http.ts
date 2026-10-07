@@ -1,4 +1,4 @@
-import type { Config, ProviderName } from '../config';
+import type { ProviderName } from '../config';
 
 /**
  * Cliente HTTP compartilhado. Cada provider ajusta base, headers e nomes de
@@ -57,10 +57,6 @@ export class Http {
     readonly baseUrl: string,
     readonly token: string
   ) {}
-
-  static fromConfig(c: Config): Http {
-    return new Http(c.provider, c.baseUrl, c.token);
-  }
 
   redact(s: string): string {
     let out = s;

@@ -1,7 +1,23 @@
-import { loadConfig, type Config, type ProviderName } from '../config';
+import {
+  ConfigError,
+  loadConfig,
+  optionsToEnv,
+  resolveProvider,
+  type Config,
+  type ProviderName,
+} from '../config';
+import {
+  defaultRunner,
+  detectProviderFromCli,
+  loadDotenv,
+  missingCredentialMessage,
+  readAuthMode,
+  resolveAuth,
+  type Runner,
+} from '../auth';
 import { createGitHost } from '../providers';
 import type { GitHost } from '../providers/types';
-import { resolveRepo } from '../repo';
+import { localDefaultBranch, resolveRepo } from '../repo';
 import { readBinding, type Binding } from './binding';
 
 /**
@@ -24,6 +40,8 @@ export type Ctx = {
   remote?: string;
   /** SlugPadrao: `PYATILETKA_DEFAULT_REPO`, o remote do clone, ou o que a tool recebeu. */
   defaultRepo?: string;
+  /** Runner das CLIs de credencial. Injetavel para teste. */
+  run?: Runner;
   notify(message: string, variant?: NotifyVariant): void;
 };
 
@@ -56,9 +74,31 @@ export function parseRefs(values?: string[]): number[] {
 }
 
 /**
- * Monta o contexto da tool. O provider vem do remote do clone quando existe,
- * senao do ambiente. Falha de config so na tools que realmente precisam dele:
- * quem so le binding ou template nao deve falhar por isso.
+ * Host que so falha quando usado, com a mensagem de credencial. Assim a carga
+ * do plugin nunca derruba a sessao por falta de token, e a primeira chamada de
+ * rede diz exatamente o que fazer.
+ */
+function unavailableHost(config: Config): GitHost {
+  const message = missingCredentialMessage(config);
+  return new Proxy({} as GitHost, {
+    get(_target, prop) {
+      if (prop === 'provider') return config.provider;
+      if (prop === 'then') return undefined;
+      // `async` para rejeitar em vez de lancar sincrono. Quem chama usa
+      // `.catch()` para degradar, e um lancamento sincrono escaparia da guarda.
+      return async () => {
+        throw new ConfigError(message);
+      };
+    },
+  });
+}
+
+/**
+ * Monta o contexto da tool. Ordem da credencial: ambiente e `.env` primeiro,
+ * depois `gh`/`tea`. O provider vem de `PYATILETKA_PROVIDER`, do remote do
+ * clone, ou da CLI que estiver logada. Sem provider ou sem token a carga nao
+ * falha: o host vira um que explica o que falta na primeira chamada e as tools
+ * de credencial continuam disponiveis.
  */
 export function createCtx(input: {
   directory: string;
@@ -66,11 +106,47 @@ export function createCtx(input: {
   env?: NodeJS.ProcessEnv;
   /** Opcoes do plugin no v2 (`ctx.options`). Sobrepõem o ambiente. */
   options?: Record<string, unknown>;
+  run?: Runner;
 }): Ctx {
   const env = input.env ?? process.env;
+  const run = input.run ?? defaultRunner;
+  const dotenv = loadDotenv(input.directory, env);
+  // Roteamento (URL, provider, host) so vem do ambiente real e dos `.env`
+  // confiaveis. O `.env` do projeto, que o clone controla, so fornece token.
+  // As options do `opencode.json` entram junto: sao confiaveis e nao trazem
+  // token nem URL.
+  const configEnv = { ...dotenv.trusted, ...optionsToEnv(input.options), ...env };
   const remote = resolveRepo(input.directory);
-  const config = loadConfig(env, remote?.provider, input.options);
-  const host = createGitHost(config);
+
+  const mode = readAuthMode(configEnv);
+  const explicit = resolveProvider(configEnv, remote?.provider);
+  const provider: ProviderName | undefined =
+    explicit ?? (mode === 'env' ? undefined : detectProviderFromCli(remote?.host, run, configEnv));
+
+  const config = loadConfig(configEnv, provider, input.options, remote?.host);
+
+  // Derivacao local, sem rede: o clone revela repo, org e branch padrao. O
+  // valor explicito do ambiente, quando existe, vence.
+  if (remote) {
+    config.defaultRepo ??= remote.slug;
+    config.org ??= remote.slug.split('/')[0];
+  }
+  config.defaultBranch ??= localDefaultBranch(input.directory);
+
+  if (config.provider) {
+    const auth = resolveAuth({
+      provider: config.provider,
+      host: config.host,
+      env,
+      fileEnv: dotenv.all,
+      run,
+      mode,
+    });
+    config.token = auth.token;
+    config.authSource = auth.source;
+  }
+
+  const host = config.provider && config.token ? createGitHost(config) : unavailableHost(config);
 
   const notify = (message: string, variant: NotifyVariant = 'info') => {
     void input.client?.tui?.showToast?.({ body: { message, variant } });
@@ -81,6 +157,7 @@ export function createCtx(input: {
     config,
     remote: remote?.slug,
     defaultRepo: config.defaultRepo ?? remote?.slug,
+    run,
     notify,
   };
 }

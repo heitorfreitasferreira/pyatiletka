@@ -16,6 +16,7 @@ import type {
   Protection,
   Pull,
   PullFile,
+  RepoInfo,
   Review,
   ReviewComment,
   Run,
@@ -24,6 +25,7 @@ import type {
   ListRunsOptions,
   LogsOptions,
   MergeStyle,
+  Viewer,
 } from './types';
 
 /**
@@ -218,6 +220,16 @@ export class GitHubHost implements GitHost {
       cap: 200,
     });
     return repos.map((r) => `${org}/${r.name}`);
+  }
+
+  async getViewer(): Promise<Viewer> {
+    const u = await this.req<{ login: string }>('/user');
+    return { login: u.login };
+  }
+
+  async getRepo(repo: string): Promise<RepoInfo> {
+    const r = await this.req<{ default_branch?: string }>(`/repos/${repo}`);
+    return { defaultBranch: r.default_branch ?? undefined };
   }
 
   // -- issues ---------------------------------------------------------------

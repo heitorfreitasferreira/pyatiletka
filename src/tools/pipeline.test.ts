@@ -212,6 +212,13 @@ describe('ci_wait', () => {
   it('branch sem execucao explica', async () => {
     expect(await runFail('ci_wait', { branch: 'nao-existe' })).toContain('Nenhuma execucao');
   });
+
+  it('sem run e sem branch, cai na branch padrao do repo pela API', async () => {
+    host.state.defaultBranch = 'feat/x';
+    const out = await run('ci_wait');
+    expect(out).toContain('org/repo run #99');
+    expect(host.called('getRepo')[0]?.args).toEqual([REPO]);
+  });
 });
 
 describe('ci_logs', () => {
@@ -258,6 +265,13 @@ describe('ci_dispatch', () => {
 
   it('sem ref e sem branch padrao, recusa', async () => {
     expect(await runFail('ci_dispatch', { workflow: 'build' })).toContain('Informe `ref`');
+  });
+
+  it('sem ref, usa a branch padrao do repo pela API', async () => {
+    host.state.defaultBranch = 'trunk';
+    await run('ci_dispatch', { workflow: 'build' });
+    expect(host.called('dispatchWorkflow')[0]?.args.slice(1, 3)).toEqual(['build', 'trunk']);
+    expect(host.called('getRepo')[0]?.args).toEqual([REPO]);
   });
 
   it('inputs vao junto', async () => {

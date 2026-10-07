@@ -1,10 +1,12 @@
-import type { Config } from '../config';
+import { ConfigError, type Config } from '../config';
 import { GiteaHost } from './gitea';
 import { GitHubHost } from './github';
 import type { GitHost } from './types';
 
 export function createGitHost(config: Config): GitHost {
-  return config.provider === 'gitea' ? new GiteaHost(config) : new GitHubHost(config);
+  if (config.provider === 'gitea') return new GiteaHost(config);
+  if (config.provider === 'github') return new GitHubHost(config);
+  throw new ConfigError('provider nao resolvido: sem credencial ou remote');
 }
 
 export type { GitHost } from './types';
