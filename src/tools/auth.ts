@@ -1,6 +1,7 @@
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
+import { tool } from '@opencode-ai/plugin';
 import { credentialEnvKeys, defaultRunner, missingCredentialMessage } from '../auth';
 import type { Ctx } from '../core/context';
+import { toolSpecs, type ToolSpec } from './spec';
 
 /**
  * Tools de credencial. `auth_status` diz de onde veio o token e o que falta.
@@ -16,10 +17,10 @@ const SOURCE_LABEL: Record<string, string> = {
   none: 'nenhuma',
 };
 
-export function authTools({ ctx }: { ctx: Ctx }): Record<string, ToolDefinition> {
+export function authTools({ ctx }: { ctx: Ctx }): ToolSpec[] {
   const run = ctx.run ?? defaultRunner;
 
-  return {
+  return toolSpecs({
     auth_status: tool({
       description:
         'Mostra a origem da credencial do provider atual (ambiente, .env, gh, tea) e, se faltar, o que fazer. Use quando uma chamada falhar por falta de acesso.',
@@ -105,5 +106,5 @@ export function authTools({ ctx }: { ctx: Ctx }): Record<string, ToolDefinition>
         ].join('\n');
       },
     }),
-  };
+  });
 }

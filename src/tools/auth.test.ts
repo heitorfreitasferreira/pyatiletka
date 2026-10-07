@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { ToolContext } from '@opencode-ai/plugin';
+import { toV1Tools } from '../adapters/v1';
 import type { Runner } from '../auth';
 import type { Ctx } from '../core/context';
 import { FakeGitHost } from '../testing/fake-git-host';
@@ -24,7 +25,7 @@ function ctxFor(over: Partial<Ctx['config']> = {}, run: Runner = noCli): Ctx {
 }
 
 const run = async (name: string, ctx: Ctx): Promise<string> =>
-  (await authTools({ ctx })[name].execute({}, toolCtx)) as string;
+  (await toV1Tools(authTools({ ctx }))[name].execute({}, toolCtx)) as string;
 
 describe('auth_status', () => {
   it('mostra a config derivada e a origem da credencial', async () => {

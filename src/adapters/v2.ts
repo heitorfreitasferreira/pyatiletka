@@ -15,6 +15,7 @@ import type { ToolGroup, ToolSpec } from '../tools/spec';
 
 /** Descricao de cada namespace. O grupo vira prefixo do nome efetivo da tool. */
 const NAMESPACES: Record<ToolGroup, string> = {
+  auth: 'Credencial e login',
   issue: 'Issues do provider',
   milestone: 'Marcos e epicos',
   pr: 'Pull requests',

@@ -10,7 +10,7 @@ import type { z } from 'zod';
  * para JSON Schema.
  */
 
-export type ToolGroup = 'issue' | 'milestone' | 'pr' | 'ci' | 'branch' | 'commit';
+export type ToolGroup = 'auth' | 'issue' | 'milestone' | 'pr' | 'ci' | 'branch' | 'commit';
 
 export type ToolExec = {
   sessionID: string;
@@ -26,7 +26,7 @@ export type ToolSpec = {
 };
 
 /** Maior prefixo primeiro, para `commit_` nao casar como outra coisa. */
-const GROUPS: ToolGroup[] = ['milestone', 'branch', 'commit', 'issue', 'ci', 'pr'];
+const GROUPS: ToolGroup[] = ['auth', 'milestone', 'branch', 'commit', 'issue', 'ci', 'pr'];
 
 function split(key: string): { group: ToolGroup; name: string } {
   for (const group of GROUPS) {

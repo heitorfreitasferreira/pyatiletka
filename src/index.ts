@@ -22,6 +22,9 @@ import { createPushHook } from './tools/push-hook';
  */
 
 export const TOOL_NAMES = [
+  // credencial
+  'auth_status',
+  'auth_login',
   // issue e marco
   'issue_bind',
   'issue_unbind',

@@ -107,6 +107,12 @@ describe('PyatiletkaPlugin', () => {
     expect(typeof hooks['tool.execute.after']).toBe('function');
   });
 
+  it('sem provider nao derruba a carga: as tools de credencial sobram', async () => {
+    const hooks = await loadPlugin({ GITEA_URL: '', GITEA_TOKEN: '' });
+    expect(Object.keys(hooks.tool ?? {})).toContain('auth_login');
+    expect(Object.keys(hooks.tool ?? {})).toContain('auth_status');
+  });
+
   it('sem token nao derruba a carga: o host falha so quando usado', async () => {
     await expect(loadPlugin({ GITEA_TOKEN: '' })).resolves.toBeDefined();
   });

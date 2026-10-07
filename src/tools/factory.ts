@@ -1,5 +1,6 @@
 import type { BindingStore } from '../core/binding';
 import type { Ctx } from '../core/context';
+import { authTools } from './auth';
 import { branchTools } from './branches';
 import { issueTools } from './issues';
 import { pipelineTools } from './pipeline';
@@ -20,6 +21,7 @@ export type ToolSpecsInput = {
 
 export function createToolSpecs({ ctx, directory, binding }: ToolSpecsInput): ToolSpec[] {
   return [
+    ...authTools({ ctx }),
     ...issueTools({ ctx, directory, binding }),
     ...pullTools({ ctx }),
     ...pipelineTools({ ctx, defaultBranch: ctx.config.defaultBranch ?? '' }),
