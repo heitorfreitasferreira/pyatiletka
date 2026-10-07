@@ -75,8 +75,9 @@ source ~/.config/pyatiletka/env && opencode
 | Tool | Gitea | GitHub |
 |---|---|---|
 | `ci_logs` | exige o binario `tea` no PATH | usa REST, o zip e o `fflate` |
+| `ci_dispatch` | passa pelo `tea` | usa a REST |
 | `pr_merge` com `style: fast-forward-only` | modo nativo | vira `rebase`, que e o mais proximo |
-| `ci_runners` | lista da org | lista da org |
+| `compare` de branch | so devolve `total_commits` e `commits` na 1.27 | devolve `ahead_by`, `behind_by` e `status` |
 
 ## Convencoes
 

@@ -696,8 +696,15 @@ export class GiteaForge implements Forge {
     if (fail) throw new Error(fail);
   }
 
+  /**
+   * Runners do repo, pelo endpoint do repo e nao pelo da org.
+   *
+   * `/orgs/{org}/actions/runners` da 404 quando o dono e uma conta de usuario,
+   * e nao so existe a partir do Gitea 1.22. O endpoint do repo funciona nos dois
+   * casos e ainda e o mais preciso: sao os runners que poderiam pegar o job
+   * daquele repo.
+   */
   async listRunners(repo: string): Promise<ForgeRunner[]> {
-    const org = repo.split('/')[0];
     const data = await this.http.request<{
       runners?: {
         id: number;
@@ -706,7 +713,7 @@ export class GiteaForge implements Forge {
         busy: boolean;
         labels?: { name: string }[];
       }[];
-    }>(`/orgs/${org}/actions/runners`, { pageParam: 'limit' });
+    }>(`/repos/${repo}/actions/runners`, { pageParam: 'limit' });
     return (data?.runners ?? []).map((r) => ({
       id: r.id,
       name: r.name,
@@ -755,20 +762,51 @@ export class GiteaForge implements Forge {
       });
   }
 
+  /**
+   * Compara duas branches por `/compare/A...B`.
+   *
+   * O Gitea 1.27 so devolve `total_commits` e `commits` nesse endpoint: nao ha
+   * `ahead_by`, `behind_by` nem `status` como no GitHub. Entao `ahead` e o tamanho
+   * da lista de commits e `behind` exige a chamada invertida.
+   *
+   * Confiar em `total_commits` sem olhar `commits.length` daria zero numa
+   * resposta truncada, que e o jeito de `branch_compare` dizer "ja identicas"
+   * para duas branches que divergem.
+   */
   async compare(repo: string, base: string, head: string): Promise<ForgeCompare> {
-    const data = await this.http.request<{
-      ahead_by?: number;
-      behind_by?: number;
-      status?: string;
-      commits?: { sha: string; commit?: { message?: string } }[];
-    }>(`/repos/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`, {
-      pageParam: 'limit',
-    });
+    const one = async (a: string, b: string) => {
+      const data = await this.http.request<{
+        total_commits?: number;
+        commits?: { sha: string; commit?: { message?: string } }[];
+      }>(`/repos/${repo}/compare/${encodeURIComponent(a)}...${encodeURIComponent(b)}`, {
+        pageParam: 'limit',
+      });
+      const list = Array.isArray(data?.commits) ? data.commits : [];
+      return {
+        // A lista e a fonte honesta. `total_commits` sozinho e a melhor
+        // estimativa quando a API manda o total e nao a pagina.
+        count: list.length ? list.length : (data?.total_commits ?? 0),
+        commits: list,
+      };
+    };
+
+    const [frente, tras] = await Promise.all([one(base, head), one(head, base)]);
+    const ahead = frente.count;
+    const behind = tras.count;
+    const status: ForgeCompare['status'] =
+      ahead > 0 && behind > 0
+        ? 'diverged'
+        : ahead > 0
+          ? 'ahead'
+          : behind > 0
+            ? 'behind'
+            : 'identical';
+
     return {
-      ahead: data.ahead_by ?? 0,
-      behind: data.behind_by ?? 0,
-      status: (data.status as ForgeCompare['status']) ?? 'identical',
-      commits: (data.commits ?? []).map((c) => ({
+      ahead,
+      behind,
+      status,
+      commits: frente.commits.map((c) => ({
         sha: c.sha,
         message: (c.commit?.message ?? '').split('\n')[0],
       })),
