@@ -16,6 +16,23 @@
 
 * `@opencode/plugin` entra como dependencia e fica external no bundle
 
+## [2.0.0](https://github.com/heitorfreitasferreira/pyatiletka/compare/v1.0.0...v2.0.0) (2026-10-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* `Config.provider` passa a ser opcional e `GitHost` ganha os metodos `getViewer` e `getRepo`.
+
+### Features
+
+* captura automatica de credencial e configuracao ([25bd55e](https://github.com/heitorfreitasferreira/pyatiletka/commit/25bd55e72de9fd3c21a58de9e596ff7254fd9fe7))
+* suporte a opencode v1 e v2 no mesmo pacote ([73ca22f](https://github.com/heitorfreitasferreira/pyatiletka/commit/73ca22ff95f066fde025ec0bf37aff76d6a04843))
+
+
+### Bug Fixes
+
+* erro de proxy deixa de despejar HTML no output da tool ([453617f](https://github.com/heitorfreitasferreira/pyatiletka/commit/453617fc66a89fc5e5132ed860dd8be1b3a5c162))
+
 ## 1.0.0 (2026-10-07)
 
 
