@@ -11,9 +11,26 @@ export class GitHostError extends Error {
     readonly path: string,
     readonly body: string
   ) {
-    super(`GitHost ${status} ${path}: ${body.slice(0, 400)}`);
+    super(`GitHost ${status} ${path}: ${describeBody(body)}`);
     this.name = 'GitHostError';
   }
+}
+
+/**
+ * Resume o corpo do erro.
+ *
+ * Quando o servidor esta fora do ar quem responde e o proxy, com uma pagina
+ * HTML inteira. Jogar isso no output da tool enche o contexto do agente de
+ * ruido e nao diz nada. Pega so o titulo, ou marca como HTML.
+ */
+export function describeBody(raw: string, max = 400): string {
+  const text = raw.trim();
+  if (!text) return '(corpo vazio)';
+  if (!/^<(?:!doctype|html)/i.test(text)) return text.slice(0, max);
+
+  const title = text.match(/<title>([^<]*)<\/title>/i)?.[1]?.trim();
+  const hint = title ? `: ${title}` : '';
+  return `(resposta HTML do servidor ou proxy${hint})`;
 }
 
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
