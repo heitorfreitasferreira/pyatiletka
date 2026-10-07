@@ -74,6 +74,16 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
   const repoArgHere = repoArg(ctx);
   const resolve = (arg?: string) => pickRepo(ctx, arg);
 
+  // Branch alvo de `ci_wait`/`ci_dispatch`: o argumento, depois o ambiente e o
+  // clone, e por fim a branch padrao do repo pela API. Assim funciona tambem
+  // fora de um clone, quando o repo veio de `PYATILETKA_DEFAULT_REPO`.
+  const resolveBranch = async (repo: string, given?: string): Promise<string | undefined> => {
+    if (given) return given;
+    if (defaultBranch) return defaultBranch;
+    const info = await ctx.host.getRepo(repo).catch(() => undefined);
+    return info?.defaultBranch;
+  };
+
   return toolSpecs({
     ci_runs: tool({
       description:
@@ -199,7 +209,7 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
       async execute(args) {
         const repo = resolve(args.repo);
         const timeoutMs = Math.max(30_000, args.timeout_ms ?? DEFAULT_TIMEOUT_MS);
-        const branch = args.branch ?? defaultBranch;
+        const branch = await resolveBranch(repo, args.branch);
 
         if (!args.run && !branch) {
           throw new Error(
@@ -348,7 +358,7 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
       },
       async execute(args) {
         const repo = resolve(args.repo);
-        const ref = args.ref ?? defaultBranch;
+        const ref = await resolveBranch(repo, args.ref);
         if (!ref) throw new Error('Informe `ref` (branch ou tag) do dispatch.');
         await ctx.host.dispatchWorkflow(repo, args.workflow, ref, args.inputs);
         ctx.notify(`Workflow ${args.workflow} disparado em ${repo}`, 'success');

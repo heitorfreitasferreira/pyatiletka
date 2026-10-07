@@ -48,13 +48,28 @@ describe('loadConfig', () => {
     expect(c.defaultRepo).toBe('acme/repo');
   });
 
-  it('exige token', () => {
-    expect(() => loadConfig({ GITEA_URL: 'https://x' })).toThrow(/GITEA_TOKEN/);
-    expect(() => loadConfig({ PYATILETKA_PROVIDER: 'github' })).toThrow(/GITHUB_TOKEN/);
+  it('nao exige token na carga: vazio fica para o resolveAuth', () => {
+    expect(loadConfig({ GITEA_URL: 'https://x' }).token).toBe('');
+    expect(loadConfig({ PYATILETKA_PROVIDER: 'github' }).token).toBe('');
   });
 
-  it('exige provider quando nada esta configurado', () => {
-    expect(() => loadConfig({})).toThrow(/Nenhum provider/);
+  it('deriva base e host do remote quando falta GITEA_URL', () => {
+    const c = loadConfig({}, 'gitea', undefined, 'git.corp');
+    expect(c.baseUrl).toBe('https://git.corp');
+    expect(c.host).toBe('git.corp');
+  });
+
+  it('host do GitHub tira o prefixo api. e aceita GH_TOKEN', () => {
+    const c = loadConfig({ GITHUB_TOKEN: 't', GITHUB_API_URL: 'https://api.github.com' });
+    expect(c.host).toBe('github.com');
+    expect(loadConfig({ GH_TOKEN: 't' }).provider).toBe('github');
+  });
+
+  it('sem provider fica um estado valido, sem lancar', () => {
+    const c = loadConfig({});
+    expect(c.provider).toBeUndefined();
+    expect(c.token).toBe('');
+    expect(c.authSource).toBe('none');
   });
 
   it('valida PYATILETKA_PROSE', () => {
@@ -123,5 +138,15 @@ describe('opcoes do plugin (v2)', () => {
   it('options vazias nao mudam nada', () => {
     const c = loadConfig({ ...github, PYATILETKA_ORG: 'env-org' }, undefined, {});
     expect(c.org).toBe('env-org');
+  });
+
+  it('options nao carregam token nem URL, entao nao desviam credencial', () => {
+    const c = loadConfig({ GITHUB_TOKEN: 'do-ambiente' }, undefined, {
+      token: 'do-opencode',
+      url: 'https://evil.example',
+      baseUrl: 'https://evil.example',
+    });
+    expect(c.baseUrl).toBe('https://api.github.com');
+    expect(c.token).toBe('do-ambiente');
   });
 });

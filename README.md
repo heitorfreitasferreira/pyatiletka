@@ -2,10 +2,12 @@
 
 Fluxo de issues, marcos, PRs e CI para agentes (opencode), em Gitea e GitHub.
 
-O plugin da ao agente 36 tools e tres hooks que resolvem o trabalho de manter
+O plugin da ao agente 38 tools e tres hooks que resolvem o trabalho de manter
 o quadro de issues em dia: vincular a sessao a uma issue, montar a fila de um
 marco a partir das dependencias reais, esperar o CI depois de um `git push` e
-recusar texto de prosa enrolada antes de gravar.
+recusar texto de prosa enrolada antes de gravar. A credencial vem de um `.env`,
+de um login ja feito no `gh`/`tea` ou de um login manual que `auth_login`
+orienta, sem configuracao previa.
 
 Suporta Gitea e GitHub com paridade: issues, marcos, dependencias, PRs, reviews,
 CI, runners e protecao de branch.
@@ -41,9 +43,29 @@ No v2 o plugin aceita opcoes, lidas como `ctx.options`:
 
 ## Configuracao
 
-Tudo vem do ambiente. Nao ha arquivo de config e o plugin nao le `~/.config/tea`.
+O plugin tenta achar a credencial sozinho, na ordem:
 
-As quatro primeiras sao os nomes que os dois providers ja usam. O resto leva o
+1. **Ambiente e `.env`**: `GITEA_TOKEN` ou `GITHUB_TOKEN`/`GH_TOKEN`. O ambiente
+   real vence o arquivo.
+2. **CLI ja logada**: o token de um `gh auth login` (GitHub) ou de um `tea login
+   add` (Gitea).
+3. **Login manual**: a tool `auth_login` diz o comando para rodar no terminal,
+   `gh auth login --web` ou `tea login add`.
+
+Sem credencial a carga nao falha, desde que o provider seja conhecido (um remote
+no clone, `PYATILETKA_PROVIDER` ou um token no ambiente). A primeira chamada de
+rede explica o que falta e `auth_status` mostra a origem do token. Sem provider
+nenhum o plugin ainda carrega e `auth_login` mostra os dois caminhos, mas as
+tools de rede recusam.
+
+Os `.env` procurados, do global para o especifico, sendo o ultimo o que vence:
+`~/.config/pyatiletka/env`, `~/.config/opencode/.env`, o `.env` do projeto e
+`PYATILETKA_ENV_FILE`. O `.env` do projeto vive dentro do clone, entao ele so
+fornece token. URL, provider, host e o resto vem do ambiente real ou dos
+arquivos em `$HOME` e de `PYATILETKA_ENV_FILE`, que o repositorio nao alcanca.
+Assim um repo nao consegue apontar uma credencial sua para outro host.
+
+Os nomes de URL e de token sao os que os providers ja usam. O resto leva o
 prefixo do pacote, que e o que evita colisao com variavel de outro programa
 (`GITHUB_*`, por exemplo, ja vem populado dentro do GitHub Actions).
 
@@ -52,17 +74,24 @@ prefixo do pacote, que e o que evita colisao com variavel de outro programa
 | `GITEA_URL` | Base do Gitea, sem barra final. Ex.: `https://gitea.example.com` |
 | `GITEA_TOKEN` | Token do Gitea |
 | `GITHUB_TOKEN` | Token do GitHub |
+| `GH_TOKEN` | Alternativa ao `GITHUB_TOKEN`, o nome que o `gh` usa |
 | `GITHUB_API_URL` | Base da API. Default `https://api.github.com` |
+| `PYATILETKA_AUTH` | `auto`, `env` ou `cli`. Forca a origem e ajuda a testar. Default `auto` |
+| `PYATILETKA_ENV_FILE` | `.env` extra, lido por ultimo |
 | `PYATILETKA_PROVIDER` | `gitea` ou `github`. Sem isso o remote do clone decide |
-| `PYATILETKA_ORG` | Org usada em `repo` sem owner, na varredura de org e nos runners |
-| `PYATILETKA_DEFAULT_REPO` | Repo `owner/nome` para tools chamadas fora de um clone |
-| `PYATILETKA_DEFAULT_BRANCH` | Branch usada por `ci_wait` e `ci_dispatch` quando o pedido nao informa |
-| `PYATILETKA_LOGIN` | Seu login, para o filtro `mine` de `pr_list` |
+| `PYATILETKA_ORG` | Org usada em `repo` sem owner, na varredura de org e nos runners. Sem isso, o owner do remote |
+| `PYATILETKA_DEFAULT_REPO` | Repo `owner/nome` para tools chamadas fora de um clone. Sem isso, o remote |
+| `PYATILETKA_DEFAULT_BRANCH` | Branch usada por `ci_wait` e `ci_dispatch`. Sem isso, o clone ou a API |
+| `PYATILETKA_LOGIN` | Seu login, para o filtro `mine` de `pr_list`. Sem isso, o usuario do token |
 | `PYATILETKA_PROMOTE_ORDER` | Ordem de `branch_promote`. Default `staging,production` |
 | `PYATILETKA_PROSE` | `off`, `warn` ou `block`. Default `block` |
 
-Provider: `PYATILETKA_PROVIDER` manda. Sem ele, o remote do clone decide, e por
-ultimo o ambiente (`GITEA_URL` presente, senao `GITHUB_TOKEN`).
+Do ambiente real todas valem. Do `.env` confiavel (em `$HOME` e
+`PYATILETKA_ENV_FILE`) todas valem. Do `.env` do projeto so `GITEA_TOKEN`,
+`GITHUB_TOKEN` e `GH_TOKEN` valem.
+
+Provider: `PYATILETKA_PROVIDER` manda. Sem ele, o remote do clone decide, depois
+o ambiente (`GITEA_URL` ou um token) e, por fim, a CLI que estiver logada.
 
 O plugin le o ambiente do processo do opencode, entao a variavel precisa estar
 exportada no shell que launched opencode. No v2, as chaves nao sensiveis tambem
@@ -70,19 +99,52 @@ podem vir de `options` no `opencode.json` (`provider`, `org`, `defaultRepo`,
 `defaultBranch`, `login`, `promoteOrder`, `prose`), que sobrepoe o ambiente.
 Token continua so no ambiente.
 
-Exemplo minimo no shell:
+### Valores derivados
+
+Fora a credencial, o plugin tambem descobre sozinho, sem rede, o que o clone ja
+sabe. O valor explicito do ambiente sempre vence a derivacao:
+
+| Valor | Derivado de |
+|---|---|
+| `org` | owner do remote do clone |
+| repo padrao | `owner/nome` do remote |
+| branch padrao | `origin/HEAD`, senao a branch atual |
+| login do `mine` | usuario dono do token (`GET /user`) |
+| provider e host | host do remote |
+
+A branch padrao tambem cai na API (`GET /repos/{repo}`) quando `ci_wait` ou
+`ci_dispatch` rodam fora de um clone, sem `PYATILETKA_DEFAULT_BRANCH`.
+
+### Credencial
+
+O jeito mais simples e deixar o `gh` ou o `tea` ja logados. O plugin pega o
+token deles sem pedir nada:
 
 ```
-export GITEA_URL=https://gitea.example.com
-export GITEA_TOKEN=...
-export PYATILETKA_ORG=minha-org
+gh auth login     # GitHub, uma vez
+tea login add     # Gitea, uma vez
 ```
 
-Para nao repetir isso a cada sessao, um arquivo fora do repo:
+Se preferir variavel, o token pode ficar no `.env` do projeto:
 
 ```bash
-source ~/.config/pyatiletka/env && opencode
+# ./.env  (fora do controle de versao)
+GITEA_TOKEN=...
 ```
+
+A URL e a org vao no ambiente real ou num arquivo da maquina, nunca no clone:
+
+```bash
+# ~/.config/pyatiletka/env
+GITEA_URL=https://gitea.example.com
+PYATILETKA_ORG=minha-org
+```
+
+Com a credencial pronta, `auth_status` mostra de onde ela veio. Faltando, o
+`auth_login` devolve o comando certo para o provider atual.
+
+O token nunca entra no contexto do agente nem na saida das tools: aparece como
+`***REDACTED***` em qualquer mensagem de erro.
 
 ### Uma tool por provider
 
@@ -230,8 +292,8 @@ para o CI, nao para passar por cima de conflito.
 | `ci_dispatch` | dispara um workflow |
 | `ci_runners` | runners da org, com estado e labels |
 
-`ci_wait` sem `run` e sem `branch` e recusado. O plugin nao adivinha qual
-execucao esperar: informe `PYATILETKA_DEFAULT_BRANCH` se quiser um padrao.
+`ci_wait` sem `run` e sem `branch` cai na branch padrao do repo: a do clone
+(`origin/HEAD`), senao a da API. So recusa quando nenhuma das duas responde.
 
 ### Branch
 

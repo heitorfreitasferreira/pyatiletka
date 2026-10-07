@@ -47,17 +47,21 @@ const ENV_KEYS = [
   'GITEA_URL',
   'GITEA_TOKEN',
   'GITHUB_TOKEN',
+  'GH_TOKEN',
   'GITHUB_API_URL',
   'PYATILETKA_PROVIDER',
   'PYATILETKA_ORG',
   'PYATILETKA_PROSE',
   'PYATILETKA_DEFAULT_REPO',
+  'PYATILETKA_AUTH',
+  'PYATILETKA_ENV_FILE',
 ];
 
 /**
  * O provider tambem vem do remote do clone, entao o diretorio precisa estar
  * fora de qualquer repo: em `/home/.../pyatiletka` o remote e GitHub e o
- * ambiente nem chega a ser consultado.
+ * ambiente nem chega a ser consultado. `HOME` aponta para o temporario para os
+ * `.env` globais do usuario nao entrarem no teste.
  */
 async function loadPlugin(over: Record<string, string> = {}) {
   const saved = { ...process.env };
@@ -65,7 +69,14 @@ async function loadPlugin(over: Record<string, string> = {}) {
   for (const k of ENV_KEYS) delete process.env[k];
   Object.assign(
     process.env,
-    { GITEA_URL: 'https://gitea.test', GITEA_TOKEN: 'token-de-teste', PYATILETKA_ORG: 'org' },
+    {
+      HOME: outside,
+      XDG_CONFIG_HOME: join(outside, '.config'),
+      PYATILETKA_AUTH: 'env',
+      GITEA_URL: 'https://gitea.test',
+      GITEA_TOKEN: 'token-de-teste',
+      PYATILETKA_ORG: 'org',
+    },
     over
   );
   try {
@@ -96,14 +107,14 @@ describe('PyatiletkaPlugin', () => {
     expect(typeof hooks['tool.execute.after']).toBe('function');
   });
 
-  it('falha com mensagem clara quando nao ha provider', async () => {
-    await expect(loadPlugin({ GITEA_URL: '', GITEA_TOKEN: '' })).rejects.toThrow(
-      /Nenhum provider configurado/
-    );
+  it('sem provider nao derruba a carga: as tools de credencial sobram', async () => {
+    const hooks = await loadPlugin({ GITEA_URL: '', GITEA_TOKEN: '' });
+    expect(Object.keys(hooks.tool ?? {})).toContain('auth_login');
+    expect(Object.keys(hooks.tool ?? {})).toContain('auth_status');
   });
 
-  it('falha quando falta o token do gitea', async () => {
-    await expect(loadPlugin({ GITEA_TOKEN: '' })).rejects.toThrow(/GITEA_TOKEN ausente/);
+  it('sem token nao derruba a carga: o host falha so quando usado', async () => {
+    await expect(loadPlugin({ GITEA_TOKEN: '' })).resolves.toBeDefined();
   });
 
   it('pe o provider do ambiente quando PYATILETKA_PROVIDER manda', async () => {

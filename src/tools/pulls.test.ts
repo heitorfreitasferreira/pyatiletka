@@ -198,9 +198,10 @@ describe('pr_list', () => {
     expect(await run('pr_list', { mine: true })).not.toContain('#2 ');
   });
 
-  it('mine sem PYATILETKA_LOGIN explica o que falta', async () => {
+  it('mine sem PYATILETKA_LOGIN usa o usuario da credencial', async () => {
     tools = toV1Tools(pullTools({ ctx: ctxFor(host, { login: undefined }) })) as never;
-    expect(await runFail('pr_list', { mine: true })).toContain('PYATILETKA_LOGIN');
+    host.state.viewer = 'ana';
+    expect(await run('pr_list', { mine: true })).toContain('#1 ');
   });
 
   it('repos com glob varre a org', async () => {

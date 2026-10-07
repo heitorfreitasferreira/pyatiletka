@@ -12,6 +12,7 @@ import type {
   Protection,
   Pull,
   PullFile,
+  RepoInfo,
   Review,
   ReviewComment,
   Run,
@@ -20,6 +21,7 @@ import type {
   ListRunsOptions,
   LogsOptions,
   MergeStyle,
+  Viewer,
 } from '../providers/types';
 
 /**
@@ -51,6 +53,8 @@ export type FakeState = {
   protections: Protection[];
   compare: Record<string, Compare>;
   repos: string[];
+  viewer: string;
+  defaultBranch?: string;
 };
 
 function emptyState(): FakeState {
@@ -73,6 +77,7 @@ function emptyState(): FakeState {
     protections: [],
     compare: {},
     repos: [],
+    viewer: 'eu',
   };
 }
 
@@ -117,6 +122,14 @@ export class FakeGitHost implements GitHost {
 
   async listRepos(org: string): Promise<string[]> {
     return this.record('listRepos', [org], this.state.repos);
+  }
+
+  async getViewer(): Promise<Viewer> {
+    return this.record('getViewer', [], { login: this.state.viewer });
+  }
+
+  async getRepo(repo: string): Promise<RepoInfo> {
+    return this.record('getRepo', [repo], { defaultBranch: this.state.defaultBranch });
   }
 
   async getIssue(repo: string, n: number): Promise<Issue> {

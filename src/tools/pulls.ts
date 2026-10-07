@@ -123,13 +123,20 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
         mine: tool.schema
           .boolean()
           .optional()
-          .describe('So PRs abertos por mim. Depende de PYATILETKA_LOGIN.'),
+          .describe('So PRs abertos por mim. Usa PYATILETKA_LOGIN ou o usuario da credencial.'),
         limit: tool.schema.number().optional().describe('Max PRs por repo (default 20).'),
       },
       async execute(args) {
         const state = args.state ?? 'open';
         const limit = args.limit ?? 20;
-        const login = ctx.config.login?.toLowerCase();
+        const login = args.mine
+          ? (ctx.config.login ?? (await ctx.host.getViewer()).login)?.toLowerCase()
+          : undefined;
+        if (args.mine && !login) {
+          throw new Error(
+            '`mine` sem login: defina PYATILETKA_LOGIN ou use uma credencial valida.'
+          );
+        }
 
         const one = async (repo: string) => {
           let list = await ctx.host.listPulls(repo, {
@@ -139,7 +146,6 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
             limit: Math.max(limit, 50),
           });
           if (args.mine) {
-            if (!login) throw new Error('`mine` precisa de PYATILETKA_LOGIN com o seu login.');
             list = list.filter((p) => p.user?.toLowerCase() === login);
           }
           return { repo, list: list.slice(0, limit) };

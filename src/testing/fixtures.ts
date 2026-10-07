@@ -47,7 +47,9 @@ export function makeConfig(over: Partial<Config> = {}): Config {
   return {
     provider: 'gitea',
     baseUrl: 'https://git.test',
+    host: 'git.test',
     token: 'token-de-teste',
+    authSource: 'env',
     org: 'org',
     defaultRepo: REPO,
     login: 'ana',

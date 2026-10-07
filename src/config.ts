@@ -1,18 +1,26 @@
 import type { ProseMode } from './prose';
 
 /**
- * Configuracao por ambiente. Sem arquivo, sem tea, sem estado no disco:
- * o usuario aponta `GITEA_URL`/`GITEA_TOKEN` ou `GITHUB_TOKEN` e o plugin
- * resolve o resto.
+ * Configuracao por ambiente. O token pode vir do ambiente, de um `.env`, de uma
+ * CLI ja logada (`gh`, `tea`) ou de um login manual, resolvido em `resolveAuth`.
+ * Aqui fica so o que nao e segredo e a base para a resolucao da credencial.
  */
 
 export type ProviderName = 'gitea' | 'github';
 
+/** De onde veio o token. `none` significa que nada respondeu ainda. */
+export type AuthSource = 'env' | 'dotenv' | 'gh' | 'tea' | 'none';
+
 export type Config = {
-  provider: ProviderName;
+  /** `undefined` quando nem o ambiente, nem o remote, nem uma CLI definem. */
+  provider: ProviderName | undefined;
   /** Base da API, sem barra final. Gitea: GITEA_URL. GitHub: GITHUB_API_URL. */
   baseUrl: string;
+  /** Host git, usado para achar a credencial no `gh`/`tea`. */
+  host: string;
   token: string;
+  /** Origem do token, para `auth_status`. */
+  authSource?: AuthSource;
   /** Org usada quando o slug do repo nao vem do remote. */
   org?: string;
   /** Repo padrao `owner/nome`, para tools chamadas fora de um clone. */
@@ -76,15 +84,16 @@ export function resolveProvider(
   }
   if (remoteProvider) return remoteProvider;
   if (env.GITEA_URL) return 'gitea';
-  if (env.GITHUB_TOKEN) return 'github';
+  if (env.GITHUB_TOKEN || env.GH_TOKEN) return 'github';
   return undefined;
 }
 
 /**
  * Opcoes do `plugins` do opencode.json, no formato das variaveis de ambiente
- * que o resto do config ja le. Options sobrepoem o ambiente.
+ * que o resto do config ja le. Options sobrepoem o ambiente. Nao carregam
+ * token nem URL, entao nao abrem o desvio que o `.env` do projeto abriria.
  */
-function optionsToEnv(options?: Record<string, unknown>): NodeJS.ProcessEnv {
+export function optionsToEnv(options?: Record<string, unknown>): NodeJS.ProcessEnv {
   if (!options) return {};
   const out: NodeJS.ProcessEnv = {};
   const str = (key: string, env: string) => {
@@ -105,56 +114,98 @@ function optionsToEnv(options?: Record<string, unknown>): NodeJS.ProcessEnv {
   return out;
 }
 
+/** Host de uma URL, sem esquema. `withPort` inclui a porta, que o `tea` precisa. */
+function hostOf(url: string | undefined, withPort = false): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url);
+    return withPort ? u.host : u.hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Host que o `gh` entende. `GITHUB_API_URL` costuma ser `api.github.com`, que
+ * nao serve para `gh --hostname`. Tira o prefixo `api.` para voltar ao host git.
+ */
+function ghHost(env: NodeJS.ProcessEnv, remoteHost?: string): string {
+  const fromApi = hostOf(env.GITHUB_API_URL);
+  return remoteHost ?? (fromApi ? fromApi.replace(/^api\./, '') : 'github.com');
+}
+
+/**
+ * Configuracao de ambiente. Sem provider e um estado valido: as tools de
+ * credencial continuam carregando e explicando o que falta. O token tambem pode
+ * estar vazio: quem resolve de verdade, inclusive `gh`/`tea` e `.env`, e o
+ * `resolveAuth` chamado em `createCtx`.
+ */
 export function loadConfig(
   env: NodeJS.ProcessEnv,
   remoteProvider?: ProviderName,
-  options?: Record<string, unknown>
+  options?: Record<string, unknown>,
+  remoteHost?: string
 ): Config {
   env = { ...env, ...optionsToEnv(options) };
   const provider = resolveProvider(env, remoteProvider);
-  if (!provider) {
-    throw new ConfigError(
-      'Nenhum provider configurado. Defina GITEA_URL/GITEA_TOKEN (Gitea) ou GITHUB_TOKEN (GitHub), ' +
-        'ou rode dentro de um clone com remote no GitHub/Gitea.'
-    );
-  }
-
   const defaultRepo = env.PYATILETKA_DEFAULT_REPO?.trim() || undefined;
   const org = env.PYATILETKA_ORG?.trim() || defaultRepo?.split('/')[0] || undefined;
   const defaultBranch = env.PYATILETKA_DEFAULT_BRANCH?.trim() || undefined;
+  const login = env.PYATILETKA_LOGIN?.trim() || undefined;
   const promoteOrder = readPromoteOrder(env);
+  const prose = readProse(env);
 
   if (provider === 'gitea') {
-    const baseUrl = normUrl(env.GITEA_URL ?? '');
-    if (!baseUrl)
-      throw new ConfigError('GITEA_URL ausente. Ex.: GITEA_URL=https://gitea.example.com');
-    const token = env.GITEA_TOKEN?.trim();
-    if (!token) throw new ConfigError('GITEA_TOKEN ausente.');
+    const rawUrl = env.GITEA_URL?.trim();
+    const baseUrl = rawUrl ? normUrl(rawUrl) : remoteHost ? `https://${remoteHost}` : '';
+    if (!baseUrl) {
+      throw new ConfigError(
+        'GITEA_URL ausente e nao deu para deduzir a base do remote. Ex.: GITEA_URL=https://gitea.example.com'
+      );
+    }
     return {
       provider,
       baseUrl,
-      token,
+      host: hostOf(baseUrl, true) ?? remoteHost ?? '',
+      token: env.GITEA_TOKEN?.trim() ?? '',
       org,
       defaultRepo,
-      login: env.PYATILETKA_LOGIN?.trim() || undefined,
+      login,
       defaultBranch,
       promoteOrder,
-      prose: readProse(env),
+      prose,
     };
   }
 
-  const baseUrl = normUrl(env.GITHUB_API_URL ?? 'https://api.github.com');
-  const token = env.GITHUB_TOKEN?.trim();
-  if (!token) throw new ConfigError('GITHUB_TOKEN ausente.');
+  if (provider === 'github') {
+    const baseUrl = normUrl(env.GITHUB_API_URL ?? 'https://api.github.com');
+    return {
+      provider,
+      baseUrl,
+      host: ghHost(env, remoteHost),
+      token: env.GITHUB_TOKEN?.trim() ?? env.GH_TOKEN?.trim() ?? '',
+      org,
+      defaultRepo,
+      login,
+      defaultBranch,
+      promoteOrder,
+      prose,
+    };
+  }
+
+  // Sem provider nao ha rede a fazer. O host do remote, quando existe, ainda
+  // ajuda o `auth_login` a apontar o lugar certo. `authStatus` diria `none`.
   return {
-    provider,
-    baseUrl,
-    token,
+    provider: undefined,
+    baseUrl: '',
+    host: remoteHost ?? '',
+    token: '',
+    authSource: 'none',
     org,
     defaultRepo,
-    login: env.PYATILETKA_LOGIN?.trim() || undefined,
+    login,
     defaultBranch,
     promoteOrder,
-    prose: readProse(env),
+    prose,
   };
 }

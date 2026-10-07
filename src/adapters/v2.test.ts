@@ -64,7 +64,7 @@ describe('setupV2', () => {
   it('declara um namespace para cada grupo', async () => {
     await setupV2(asV2());
     expect(new Set(plugin.namespaces.map((n) => n.name))).toEqual(
-      new Set(['issue', 'milestone', 'pr', 'ci', 'branch', 'commit'])
+      new Set(['auth', 'issue', 'milestone', 'pr', 'ci', 'branch', 'commit'])
     );
   });
 

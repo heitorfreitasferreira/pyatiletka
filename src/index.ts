@@ -15,9 +15,16 @@ import { createPushHook } from './tools/push-hook';
  * Suporta opencode v1 e v2 pelo mesmo pacote. O v2 chama `setup` (default
  * export objeto), o v1 chama `server` (entrypoint objeto, opencode >= 1.18.29).
  * A config vem do ambiente e, no v2, tambem de `ctx.options`.
+ *
+ * A credencial vem do ambiente, de um `.env`, de um login ja feito no `gh`/`tea`
+ * ou de um login manual. Sem nenhuma, a carga nao falha: a primeira chamada de
+ * rede explica o que falta e `auth_login` diz o comando.
  */
 
 export const TOOL_NAMES = [
+  // credencial
+  'auth_status',
+  'auth_login',
   // issue e marco
   'issue_bind',
   'issue_unbind',
