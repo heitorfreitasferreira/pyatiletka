@@ -122,6 +122,19 @@ describe('PyatiletkaPlugin', () => {
   });
 });
 
+/**
+ * O loader de plugin npm resolve o entrypoint `server` por `exports["./server"]`
+ * e, sem ele, por `package.json main`. Sem os dois o pacote e ignorado em
+ * silencio, entao os campos ficam presos por teste.
+ */
+describe('entrada do pacote', () => {
+  it('expoe o mesmo arquivo em main e exports["./server"]', async () => {
+    const pkg = (await import('../package.json')).default;
+    expect(pkg.main).toBe('./dist/index.js');
+    expect(pkg.exports['./server'].default).toBe('./dist/index.js');
+  });
+});
+
 describe('hooks de contexto', () => {
   let dir: string;
   let host: FakeGitHost;
