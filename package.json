@@ -1,6 +1,6 @@
 {
   "name": "pyatiletka",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Fluxo de issues, milestones e PRs para agentes (OpenCode): binding de sessao, fila de dependencias e gate de prosa. Suporta Gitea e GitHub.",
   "author": {
     "name": "Heitor Freitas",
