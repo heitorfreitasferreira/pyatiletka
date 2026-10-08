@@ -19,8 +19,13 @@
     "workflow"
   ],
   "type": "module",
+  "main": "./dist/index.js",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }

@@ -105,9 +105,11 @@ Tipos suportados: generic (qualquer), json, yaml, xml e toml.
 ### Marcadores de versao em comentario
 
 ```javascript
-// x-release-please-version
-const VERSION = '1.0.0';
+const VERSION = '1.0.0'; // x-release-please-version
 ```
+
+O marcador substitui o valor **na mesma linha**, entao a anotacao precisa
+ficar junto do numero.
 
 ```markdown
 <!-- x-release-please-start-version -->
