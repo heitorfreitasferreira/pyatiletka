@@ -16,6 +16,13 @@
 
 * `@opencode/plugin` entra como dependencia e fica external no bundle
 
+## [2.0.2](https://github.com/heitorfreitasferreira/pyatiletka/compare/v2.0.1...v2.0.2) (2026-10-09)
+
+
+### Bug Fixes
+
+* usa o directory real quando worktree e a raiz ([3ac29db](https://github.com/heitorfreitasferreira/pyatiletka/commit/3ac29dbe0925079765088c0cd0cf048f00e70c6a))
+
 ## [2.0.1](https://github.com/heitorfreitasferreira/pyatiletka/compare/v2.0.0...v2.0.1) (2026-10-08)
 
 
