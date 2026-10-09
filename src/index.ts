@@ -115,7 +115,7 @@ export function createHooks(
 /** Entrypoint v1: funcao que recebe o input do host e devolve tools e hooks. */
 export const PyatiletkaPlugin: Plugin = async ({ directory, client, worktree }) => {
   const ctx = createCtx({ directory, client: client as Client });
-  const root = worktree || directory;
+  const root = worktree && worktree !== '/' ? worktree : directory;
 
   return {
     tool: createTools(ctx, root),

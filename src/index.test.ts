@@ -63,9 +63,14 @@ const ENV_KEYS = [
  * ambiente nem chega a ser consultado. `HOME` aponta para o temporario para os
  * `.env` globais do usuario nao entrarem no teste.
  */
-async function loadPlugin(over: Record<string, string> = {}) {
+async function loadPlugin(
+  over: Record<string, string> = {},
+  where: { directory?: string; worktree?: string } = {}
+) {
   const saved = { ...process.env };
   const outside = mkdtempSync(join(tmpdir(), 'pyatiletka-fora-'));
+  const directory = where.directory ?? outside;
+  const worktree = where.worktree ?? directory;
   for (const k of ENV_KEYS) delete process.env[k];
   Object.assign(
     process.env,
@@ -81,9 +86,9 @@ async function loadPlugin(over: Record<string, string> = {}) {
   );
   try {
     return (await PyatiletkaPlugin({
-      directory: outside,
+      directory,
       client: {},
-      worktree: outside,
+      worktree,
     } as never)) as Hooks;
   } finally {
     rmSync(outside, { recursive: true, force: true });
@@ -119,6 +124,19 @@ describe('PyatiletkaPlugin', () => {
 
   it('pe o provider do ambiente quando PYATILETKA_PROVIDER manda', async () => {
     await expect(loadPlugin({ PYATILETKA_PROVIDER: 'gitea' })).resolves.toBeDefined();
+  });
+
+  it('worktree "/" (projeto global) usa o directory real', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pyatiletka-sem-git-'));
+    try {
+      const hooks = await loadPlugin({}, { directory: dir, worktree: '/' });
+      writeBinding(dir, 'ses_1', { repo: REPO, issue: 7, milestone: 'Entrega', boundAt: 'x' });
+      const output = { context: [] as string[] };
+      await hooks['experimental.session.compacting']?.({ sessionID: 'ses_1' }, output);
+      expect(output.context.join('\n')).toContain('org/repo#7');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
