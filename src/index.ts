@@ -14,7 +14,8 @@ import { createPushHook } from './tools/push-hook';
  *
  * Suporta opencode v1 e v2 pelo mesmo pacote. O v2 chama `setup` (default
  * export objeto), o v1 chama `server` (entrypoint objeto, opencode >= 1.18.29).
- * A config vem do ambiente e, no v2, tambem de `ctx.options`.
+ * A config vem do ambiente e das `options` do `opencode.json`: o v2 as entrega
+ * em `ctx.options` e o v1 no segundo argumento do `server`.
  *
  * A credencial vem do ambiente, de um `.env`, de um login ja feito no `gh`/`tea`
  * ou de um login manual. Sem nenhuma, a carga nao falha: a primeira chamada de
@@ -113,8 +114,8 @@ export function createHooks(
 }
 
 /** Entrypoint v1: funcao que recebe o input do host e devolve tools e hooks. */
-export const PyatiletkaPlugin: Plugin = async ({ directory, client, worktree }) => {
-  const ctx = createCtx({ directory, client: client as Client });
+export const PyatiletkaPlugin: Plugin = async ({ directory, client, worktree }, options) => {
+  const ctx = createCtx({ directory, client: client as Client, options });
   const root = worktree && worktree !== '/' ? worktree : directory;
 
   return {

@@ -65,7 +65,8 @@ const ENV_KEYS = [
  */
 async function loadPlugin(
   over: Record<string, string> = {},
-  where: { directory?: string; worktree?: string } = {}
+  where: { directory?: string; worktree?: string } = {},
+  options: Record<string, unknown> = {}
 ) {
   const saved = { ...process.env };
   const outside = mkdtempSync(join(tmpdir(), 'pyatiletka-fora-'));
@@ -85,11 +86,14 @@ async function loadPlugin(
     over
   );
   try {
-    return (await PyatiletkaPlugin({
-      directory,
-      client: {},
-      worktree,
-    } as never)) as Hooks;
+    return (await PyatiletkaPlugin(
+      {
+        directory,
+        client: {},
+        worktree,
+      } as never,
+      options
+    )) as Hooks;
   } finally {
     rmSync(outside, { recursive: true, force: true });
     process.env = saved as NodeJS.ProcessEnv;
@@ -124,6 +128,18 @@ describe('PyatiletkaPlugin', () => {
 
   it('pe o provider do ambiente quando PYATILETKA_PROVIDER manda', async () => {
     await expect(loadPlugin({ PYATILETKA_PROVIDER: 'gitea' })).resolves.toBeDefined();
+  });
+
+  it('options do v1 sobrepoem o ambiente (per-pasta)', async () => {
+    const hooks = await loadPlugin({}, {}, {
+      provider: 'github',
+      org: 'heitorfreitasferreira',
+      defaultRepo: 'heitorfreitasferreira/k8s-gitops-platform',
+    });
+    const out = (await hooks.tool?.auth_status.execute({}, {} as never)) as string;
+    expect(out).toContain('provider: github');
+    expect(out).toContain('org: heitorfreitasferreira');
+    expect(out).toContain('repo padrao: heitorfreitasferreira/k8s-gitops-platform');
   });
 
   it('worktree "/" (projeto global) usa o directory real', async () => {
