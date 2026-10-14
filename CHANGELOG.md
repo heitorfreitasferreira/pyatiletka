@@ -16,6 +16,13 @@
 
 * `@opencode/plugin` entra como dependencia e fica external no bundle
 
+## [2.0.3](https://github.com/heitorfreitasferreira/pyatiletka/compare/v2.0.2...v2.0.3) (2026-10-14)
+
+
+### Bug Fixes
+
+* entrypoint v1 repassa as options do opencode.json ([02de25a](https://github.com/heitorfreitasferreira/pyatiletka/commit/02de25ae9e13efc03684dded65ecee30cc5291b1))
+
 ## [2.0.2](https://github.com/heitorfreitasferreira/pyatiletka/compare/v2.0.1...v2.0.2) (2026-10-09)
 
 
