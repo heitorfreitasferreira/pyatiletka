@@ -1,0 +1,16 @@
+{
+  "name": "pyatiletka",
+  "owner": {
+    "name": "Heitor Freitas",
+    "url": "https://github.com/heitorfreitasferreira/pyatiletka"
+  },
+  "description": "Fluxo de issues, marcos, PRs e CI para agentes, em Gitea e GitHub.",
+  "plugins": [
+    {
+      "name": "pyatiletka",
+      "source": "./claude/pyatiletka",
+      "category": "workflow",
+      "tags": ["issues", "pull-requests", "gitea", "github", "ci", "mcp"]
+    }
+  ]
+}

@@ -3,11 +3,13 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  WORKSPACE_KEY,
   bindingFile,
   clearBinding,
   fileBinding,
   readBinding,
   storageBinding,
+  workspaceBinding,
   writeBinding,
   type Binding,
   type JsonStorage,
@@ -26,6 +28,16 @@ afterEach(() => {
 describe('bindingFile', () => {
   it('vive em .opencode/.state/issue-sessions, nomeado pela sessao', () => {
     expect(bindingFile('/w', 'ses_1')).toBe('/w/.opencode/.state/issue-sessions/ses_1.json');
+  });
+
+  it('stateDir relativo muda a pasta e mantem o diretorio base', () => {
+    expect(bindingFile('/w', 'ses_1', '.claude/.state/pyatiletka')).toBe(
+      '/w/.claude/.state/pyatiletka/ses_1.json'
+    );
+  });
+
+  it('stateDir absoluto ignora o diretorio base', () => {
+    expect(bindingFile('/w', 'ses_1', '/estado')).toBe('/estado/ses_1.json');
   });
 });
 
@@ -95,6 +107,31 @@ describe('fileBinding', () => {
     expect(await store.read('ses_1')).toEqual(b);
     expect(await store.clear('ses_1')).toBe(true);
     expect(await store.read('ses_1')).toBeUndefined();
+  });
+});
+
+describe('workspaceBinding', () => {
+  const stateDir = '.claude/.state/pyatiletka';
+
+  it('um vinculo por diretorio, sem depender da sessao', async () => {
+    const store = workspaceBinding(dir, stateDir);
+    const b: Binding = { repo: 'org/repo', issue: 9, boundAt: '2026-01-01T00:00:00Z' };
+    expect(await store.write('ses_a', b)).toBe(bindingFile(dir, WORKSPACE_KEY, stateDir));
+    expect(await store.read('ses_b')).toEqual(b);
+  });
+
+  it('grava a chave unica, entao outra sessao nao acha arquivo proprio', async () => {
+    const store = workspaceBinding(dir, stateDir);
+    await store.write('ses_a', { repo: 'org/repo', boundAt: '2026-01-01T00:00:00Z' });
+    expect(readBinding(dir, WORKSPACE_KEY, stateDir)?.repo).toBe('org/repo');
+    expect(readBinding(dir, 'ses_a', stateDir)).toBeUndefined();
+  });
+
+  it('clear desvincula para todos', async () => {
+    const store = workspaceBinding(dir, stateDir);
+    await store.write('ses_a', { repo: 'org/repo', boundAt: '2026-01-01T00:00:00Z' });
+    expect(await store.clear('ses_b')).toBe(true);
+    expect(await store.read('ses_a')).toBeUndefined();
   });
 });
 

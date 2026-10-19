@@ -42,6 +42,15 @@ export type Ctx = {
   defaultRepo?: string;
   /** Runner das CLIs de credencial. Injetavel para teste. */
   run?: Runner;
+  /**
+   * Prefixo do nome de tool no host. Vazio no opencode, o nome puro. No Claude
+   * Code as tools chegam com o prefixo do servidor MCP e o texto que aponta uma
+   * tool precisa acompanhar. Ver `toolRef` em `src/tools/spec` e
+   * `claudeToolPrefix` em `src/adapters/claude.ts`.
+   */
+  toolPrefix?: string;
+  /** Onde mora o vinculo. Ausente = o padrao do opencode (`.opencode/.state`). */
+  stateDir?: string;
   notify(message: string, variant?: NotifyVariant): void;
 };
 
@@ -107,6 +116,10 @@ export function createCtx(input: {
   /** Opcoes do plugin no v2 (`ctx.options`). Sobrepõem o ambiente. */
   options?: Record<string, unknown>;
   run?: Runner;
+  /** Prefixo do nome de tool do host. Ausente = nome puro (opencode). */
+  toolPrefix?: string;
+  /** Onde mora o vinculo do workspace. Ausente = padrao do opencode. */
+  stateDir?: string;
 }): Ctx {
   const env = input.env ?? process.env;
   const run = input.run ?? defaultRunner;
@@ -158,6 +171,8 @@ export function createCtx(input: {
     remote: remote?.slug,
     defaultRepo: config.defaultRepo ?? remote?.slug,
     run,
+    toolPrefix: input.toolPrefix,
+    stateDir: input.stateDir,
     notify,
   };
 }

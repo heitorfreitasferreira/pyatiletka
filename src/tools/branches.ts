@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tool } from '@opencode-ai/plugin';
-import { toolSpecs, type ToolSpec } from './spec';
+import { toolRef, toolSpecs, type ToolSpec } from './spec';
 import { DEFAULT_PROMOTE_ORDER as FALLBACK_ORDER } from '../config';
 import { pickRepo, type Ctx } from '../core/context';
 import type { Compare } from '../providers/types';
@@ -97,6 +97,7 @@ export function branchTools({
 }: BranchToolsInput): ToolSpec[] {
   const repoArgHere = repoArg(ctx);
   const resolve = (arg?: string) => pickRepo(ctx, arg);
+  const refTool = (name: string) => toolRef(ctx.toolPrefix, name);
 
   return toolSpecs({
     branch_protections: tool({
@@ -201,7 +202,7 @@ export function branchTools({
             : cmp.ahead === 0
               ? 'Nada a fazer.'
               : cmp.behind === 0
-                ? 'Sem conflito: `branch_promote` propaga direto. Para revisar por PR, use `pr_create`.'
+                ? `Sem conflito: \`${refTool('branch_promote')}\` propaga direto. Para revisar por PR, use \`${refTool('pr_create')}\`.`
                 : `Ha commits em ${args.base} que nao estao em ${args.head}: resolva localmente e mande por PR. Nao promova direto.`
         );
         return lines.join('\n');

@@ -1,7 +1,7 @@
 {
   "name": "pyatiletka",
   "version": "2.0.2",
-  "description": "Fluxo de issues, milestones e PRs para agentes (OpenCode): binding de sessao, fila de dependencias e gate de prosa. Suporta Gitea e GitHub.",
+  "description": "Fluxo de issues, milestones e PRs para agentes: binding de sessao, fila de dependencias e gate de prosa. Plugin para opencode e plugin mais servidor MCP para o Claude Code. Suporta Gitea e GitHub.",
   "author": {
     "name": "Heitor Freitas",
     "email": "47534514+heitorfreitasferreira@users.noreply.github.com"
@@ -10,6 +10,10 @@
   "keywords": [
     "opencode",
     "opencode-plugin",
+    "claude-code",
+    "claude-code-plugin",
+    "mcp",
+    "mcp-server",
     "gitea",
     "github",
     "issues",
@@ -20,6 +24,9 @@
   ],
   "type": "module",
   "main": "./dist/index.js",
+  "bin": {
+    "pyatiletka": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -59,6 +66,7 @@
   },
   "dependencies": {
     "@opencode/plugin": "^2.0.24",
-    "fflate": "^0.8.3"
+    "fflate": "^0.8.3",
+    "zod": "^4.1.8"
   }
 }

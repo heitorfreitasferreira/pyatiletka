@@ -1,7 +1,7 @@
 import { tool } from '@opencode-ai/plugin';
 import { credentialEnvKeys, defaultRunner, missingCredentialMessage } from '../auth';
 import type { Ctx } from '../core/context';
-import { toolSpecs, type ToolSpec } from './spec';
+import { toolRef, toolSpecs, type ToolSpec } from './spec';
 
 /**
  * Tools de credencial. `auth_status` diz de onde veio o token e o que falta.
@@ -48,8 +48,7 @@ export function authTools({ ctx }: { ctx: Ctx }): ToolSpec[] {
     }),
 
     auth_login: tool({
-      description:
-        'Explica como obter a credencial do provider atual: o comando de login no terminal (gh abre o navegador, tea cria um login) ou a variavel de ambiente. Use quando `auth_status` mostrar que falta credencial.',
+      description: `Explica como obter a credencial do provider atual: o comando de login no terminal (gh abre o navegador, tea cria um login) ou a variavel de ambiente. Use quando \`${toolRef(ctx.toolPrefix, 'auth_status')}\` mostrar que falta credencial.`,
       args: {},
       async execute() {
         const c = ctx.config;

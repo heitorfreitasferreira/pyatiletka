@@ -1,15 +1,21 @@
 import { fmtComment, fmtIssue } from './format';
 import type { Binding } from './binding';
 import type { Ctx } from './context';
+import { toolRef } from '../tools/spec';
 
 /**
  * Texto injetado na sessao a partir do vinculo. Vive aqui para o v1
- * (`experimental.chat.system.transform`) e o v2 (`ctx.session.hook("context")`)
- * usarem a mesma mensagem.
+ * (`experimental.chat.system.transform`), o v2 (`ctx.session.hook("context")`)
+ * e o Claude Code (hook de sessao) usarem a mesma mensagem.
  */
 
 /** Regras que o agente segue enquanto o vinculo estiver ativo. */
-export function bindingPrompt(repo: string, issue?: number, milestone?: string): string {
+export function bindingPrompt(
+  repo: string,
+  issue?: number,
+  milestone?: string,
+  toolPrefix?: string
+): string {
   return [
     '',
     '## Contexto da sessao: issue vinculada',
@@ -21,10 +27,10 @@ export function bindingPrompt(repo: string, issue?: number, milestone?: string):
     'Regras enquanto o vinculo estiver ativo:',
     '- Trabalhe **dentro** do escopo e do criterio de aceite desta issue.',
     '- Os comentarios abaixo sao o log de trabalho e contexto obrigatorio: leia-os antes de agir.',
-    '- Registre progresso com `issue_comment` (blocos `## Update YYYY-MM-DD`) em vez de narrar de novo.',
+    `- Registre progresso com \`${toolRef(toolPrefix, 'issue_comment')}\` (blocos \`## Update YYYY-MM-DD\`) em vez de narrar de novo.`,
     '- Marque `Status/In Progress` ao comecar. Se travar, use `Status/Blocked`, comente e **pergunte** ao usuario.',
     '- Nao feche a issue sem verificar o criterio de aceite.',
-    '- Pendencias descobertas viram `issue_create` no mesmo marco.',
+    `- Pendencias descobertas viram \`${toolRef(toolPrefix, 'issue_create')}\` no mesmo marco.`,
   ].join('\n');
 }
 
@@ -33,7 +39,7 @@ export function bindingPrompt(repo: string, issue?: number, milestone?: string):
  * nao derruba o turno: o vinculo continua valendo e o aviso vai junto.
  */
 export async function buildSystemHead(ctx: Ctx, b: Binding): Promise<string> {
-  let head = bindingPrompt(b.repo, b.issue, b.milestone);
+  let head = bindingPrompt(b.repo, b.issue, b.milestone, ctx.toolPrefix);
   if (!b.issue) return head;
 
   try {
@@ -57,11 +63,13 @@ export async function buildSystemHead(ctx: Ctx, b: Binding): Promise<string> {
 }
 
 /** Nota que preserva o vinculo atraves de compaction. */
-export function compactionNote(b: Binding): string {
+export function compactionNote(b: Binding, toolPrefix?: string): string {
+  const view = toolRef(toolPrefix, 'issue_view');
+  const comment = toolRef(toolPrefix, 'issue_comment');
   return (
     `Sessao vinculada a issue ${b.repo}#${b.issue}${
       b.milestone ? ` (marco ${b.milestone})` : ''
-    }. Ao retomar, chame issue_view nessa issue: ela traz o corpo e TODOS os comentarios, ` +
-    'que sao o log de trabalho. Continue de onde parou e registre progresso com issue_comment.'
+    }. Ao retomar, chame ${view} nessa issue: ela traz o corpo e TODOS os comentarios, ` +
+    `que sao o log de trabalho. Continue de onde parou e registre progresso com ${comment}.`
   );
 }

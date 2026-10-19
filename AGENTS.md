@@ -74,8 +74,9 @@
 
 ## Project Context
 
-- **Type**: plugin para opencode (ES Module para Bun)
-- **Target**: Bun runtime, ES2021+
+- **Type**: plugin para opencode e plugin mais servidor MCP para o Claude Code
+  (ES Module para Bun)
+- **Target**: Bun runtime para o plugin, node para o binario do CLI, ES2021+
 - **Purpose**: fluxo de issues, marcos, PRs e CI para agentes, em Gitea e GitHub
 
 ## Onde mexer
@@ -85,9 +86,24 @@
 - `src/core/`: funcoes puras. `format`, `template`, `milestone`, `binding` e
   `context` nao tocam rede nem disco, exceto `binding`.
 - `src/tools/`: as tools e o hook de push. Recebem um `Ctx` pronto.
+- `src/adapters/`: quem conhece o host. `v1` e `v2` sao do opencode, `claude.ts`
+  le o ambiente do Claude Code.
+- `src/mcp/`: protocolo JSON-RPC sobre stdio e a montagem do servidor.
+- `src/cli/`: o binario `pyatiletka`, com `mcp` e `hook <evento>`.
+- `claude/pyatiletka/`: o plugin do Claude Code (manifest, hooks, skill).
 - `src/testing/`: `FakeGitHost` e fixtures. Nao entra no `dist`, porque
   `src/index.ts` nao importa.
 
 Tool nova entra em um dos grupos existentes de `src/tools/` e vira item de
 `TOOL_NAMES` em `src/index.ts`. O teste `TOOL_NAMES > batem com o que
 createTools monta` falha se a lista e a montagem divergirem.
+
+`src/mcp/` e `src/cli/` nunca importam `@opencode-ai/plugin` nem
+`@opencode/plugin`, e nunca importam `src/index.ts`: o processo do Claude Code
+nao pode arrastar o plugin do opencode. O unico ponto que conhece o opencode e
+`src/index.ts`.
+
+O nome da tool muda de host para host. Texto que aponta uma tool para o agente
+passa por `toolRef` (`src/tools/spec.ts`), e o prefixo vem de `Ctx.toolPrefix`.
+Sem prefixo o texto sai identico ao do opencode, e o teste
+`nome da tool por host` prende isso.

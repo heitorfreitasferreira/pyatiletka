@@ -1,5 +1,5 @@
 import { tool } from '@opencode-ai/plugin';
-import { toolSpecs, type ToolSpec } from './spec';
+import { toolRef, toolSpecs, type ToolSpec } from './spec';
 import { errorLines } from '../core/logs';
 import { branchOf, dur, fmtRun, isActive, runState } from '../core/format';
 import { expandRepos, parseRef, pickRepo, type Ctx } from '../core/context';
@@ -73,6 +73,7 @@ export function isRealPush(cmd: string): boolean {
 export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): ToolSpec[] {
   const repoArgHere = repoArg(ctx);
   const resolve = (arg?: string) => pickRepo(ctx, arg);
+  const refTool = (name: string) => toolRef(ctx.toolPrefix, name);
 
   // Branch alvo de `ci_wait`/`ci_dispatch`: o argumento, depois o ambiente e o
   // clone, e por fim a branch padrao do repo pela API. Assim funciona tambem
@@ -242,7 +243,7 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
             `timeout apos ${Math.round(timeoutMs / 1000)}s - ${repo} run #${run.id} ainda em ${run.status}`,
             `  branch: ${branchOf(run)}  sha: ${(run.sha ?? '').slice(0, 7)}`,
             '  Isso nao e falha: o runner pode estar ocupado, offline, ou o job ainda em espera.',
-            '  Proximo passo: `ci_run` para o estado e `ci_runners` para o runner, ou `ci_wait` de novo para estender.',
+            `  Proximo passo: \`${refTool('ci_run')}\` para o estado e \`${refTool('ci_runners')}\` para o runner, ou \`${refTool('ci_wait')}\` de novo para estender.`,
           ].join('\n');
         }
 
@@ -258,7 +259,7 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
           const errs = errorLines(log);
           if (errs.length) {
             head.push(`\n--- linhas de erro (ultimas ${errs.length}) ---`, ...errs);
-            head.push('\n(Use `ci_logs` com step/grep para o contexto completo.)');
+            head.push(`\n(Use \`${refTool('ci_logs')}\` com step/grep para o contexto completo.)`);
           }
         }
         ctx.notify(
@@ -336,7 +337,9 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
                   (w) =>
                     `  ${w.id}${w.state && w.state !== 'active' ? ` [${w.state}]` : ''} - ${w.name}`
                 )
-                .join('\n')}\n  (dispatch por id; \`ci_dispatch\` aceita o id ou o nome do arquivo)`
+                .join(
+                  '\n'
+                )}\n  (dispatch por id; \`${refTool('ci_dispatch')}\` aceita o id ou o nome do arquivo)`
             : '\nworkflows: (nenhum ou sem permissao)'
         );
 
@@ -345,8 +348,7 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
     }),
 
     ci_dispatch: tool({
-      description:
-        'Dispara um workflow manualmente. `inputs` sao pares chave/valor; confirme os nomes validos com `ci_config` antes.',
+      description: `Dispara um workflow manualmente. \`inputs\` sao pares chave/valor; confirme os nomes validos com \`${refTool('ci_config')}\` antes.`,
       args: {
         repo: repoArgHere,
         workflow: tool.schema.string().describe('Nome ou arquivo do workflow (ex.: deploy.yml).'),
@@ -366,8 +368,8 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
         return [
           `Dispatch aceito: ${args.workflow} @ ${ref} em ${repo}`,
           run
-            ? `Run gerado: #${run.id} (${run.status}/${run.conclusion ?? '?'}). Use \`ci_wait\` para acompanhar.`
-            : 'Nenhuma execucao visivel ainda; valide com `ci_runs` em alguns segundos.',
+            ? `Run gerado: #${run.id} (${run.status}/${run.conclusion ?? '?'}). Use \`${refTool('ci_wait')}\` para acompanhar.`
+            : `Nenhuma execucao visivel ainda; valide com \`${refTool('ci_runs')}\` em alguns segundos.`,
         ].join('\n');
       },
     }),

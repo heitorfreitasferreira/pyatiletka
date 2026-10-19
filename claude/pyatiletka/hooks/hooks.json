@@ -1,0 +1,41 @@
+{
+  "description": "Contexto da issue vinculada, e espera do CI depois de um git push",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y pyatiletka@latest hook context",
+            "timeout": 90
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y pyatiletka@latest hook context",
+            "timeout": 90
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git push *)",
+            "command": "npx -y pyatiletka@latest hook push",
+            "timeout": 1200,
+            "statusMessage": "pyatiletka: aguardando o CI do push"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import type { Hooks } from '@opencode-ai/plugin';
 import { createHooks, createTools, PyatiletkaPlugin, TOOL_NAMES } from './index';
 import { readBinding, writeBinding } from './core/binding';
+import { bindingPrompt, compactionNote } from './core/session';
+import { toolRef } from './tools/spec';
 import type { Ctx } from './core/context';
 import { FakeGitHost } from './testing/fake-git-host';
 import { makeComment, makeConfig, makeIssue, REPO } from './testing/fixtures';
@@ -35,6 +37,37 @@ describe('TOOL_NAMES', () => {
       expect(typeof t.description, name).toBe('string');
       expect(typeof t.execute, name).toBe('function');
     }
+  });
+});
+
+/**
+ * O mesmo pacote atende o opencode e o Claude Code. O nome da tool muda de um
+ * host para o outro, e o texto que o agente le precisa acompanhar. Sem prefixo
+ * o texto tem de sair identico ao que sempre foi, senao a identidade do plugin
+ * do opencode se perde.
+ */
+describe('nome da tool por host', () => {
+  it('sem prefixo devolve o nome puro', () => {
+    expect(toolRef(undefined, 'issue_bind')).toBe('issue_bind');
+    expect(toolRef('', 'ci_wait')).toBe('ci_wait');
+  });
+
+  it('com prefixo devolve o nome que o host apresenta', () => {
+    expect(toolRef('mcp__pyatiletka__', 'issue_bind')).toBe('mcp__pyatiletka__issue_bind');
+  });
+
+  it('o contexto do opencode nao ganha prefixo', () => {
+    expect(bindingPrompt(REPO, 7)).toContain('`issue_comment`');
+    expect(bindingPrompt(REPO, 7)).toContain('`issue_create`');
+    expect(compactionNote({ repo: REPO, issue: 7, boundAt: 'x' })).toContain('chame issue_view');
+  });
+
+  it('o contexto do Claude Code ganha o prefixo do servidor', () => {
+    const prefix = 'mcp__plugin_pyatiletka_pyatiletka__';
+    expect(bindingPrompt(REPO, 7, undefined, prefix)).toContain(`\`${prefix}issue_comment\``);
+    expect(compactionNote({ repo: REPO, issue: 7, boundAt: 'x' }, prefix)).toContain(
+      `chame ${prefix}issue_view`
+    );
   });
 });
 
@@ -131,11 +164,15 @@ describe('PyatiletkaPlugin', () => {
   });
 
   it('options do v1 sobrepoem o ambiente (per-pasta)', async () => {
-    const hooks = await loadPlugin({}, {}, {
-      provider: 'github',
-      org: 'heitorfreitasferreira',
-      defaultRepo: 'heitorfreitasferreira/k8s-gitops-platform',
-    });
+    const hooks = await loadPlugin(
+      {},
+      {},
+      {
+        provider: 'github',
+        org: 'heitorfreitasferreira',
+        defaultRepo: 'heitorfreitasferreira/k8s-gitops-platform',
+      }
+    );
     const out = (await hooks.tool?.auth_status.execute({}, {} as never)) as string;
     expect(out).toContain('provider: github');
     expect(out).toContain('org: heitorfreitasferreira');

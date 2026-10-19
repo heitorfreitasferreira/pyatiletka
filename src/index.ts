@@ -96,16 +96,16 @@ export function createHooks(
      * vai junto.
      */
     'experimental.chat.system.transform': async (input, output) => {
-      const b = input.sessionID ? readBinding(root, input.sessionID) : undefined;
+      const b = input.sessionID ? readBinding(root, input.sessionID, ctx.stateDir) : undefined;
       if (!b) return;
       output.system.push(await buildSystemHead(ctx, b));
     },
 
     /** Preserva o vinculo atraves de compaction. */
     'experimental.session.compacting': async (input, output) => {
-      const b = readBinding(root, input.sessionID);
+      const b = readBinding(root, input.sessionID, ctx.stateDir);
       if (!b) return;
-      output.context.push(compactionNote(b));
+      output.context.push(compactionNote(b, ctx.toolPrefix));
     },
 
     /** Push espera o CI antes de devolver. Ver `src/tools/push-hook.ts`. */

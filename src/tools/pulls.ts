@@ -1,5 +1,5 @@
 import { tool } from '@opencode-ai/plugin';
-import { toolSpecs, type ToolSpec } from './spec';
+import { toolRef, toolSpecs, type ToolSpec } from './spec';
 import { assertProse } from '../prose';
 import { expandRepos, parseRef, pickRepo, type Ctx } from '../core/context';
 import { fmtComment, fmtReview, fmtReviewComment } from '../core/format';
@@ -95,6 +95,7 @@ function compile(pattern: string, field: string): RegExp {
 }
 
 export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
+  const refTool = (name: string) => toolRef(ctx.toolPrefix, name);
   const repoArgHere = repoArg(ctx);
   const resolve = (arg?: string) => pickRepo(ctx, arg);
 
@@ -260,8 +261,7 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
     }),
 
     pr_checks: tool({
-      description:
-        'So o estado de CI do head de um PR, e se esta verde. Use como porta antes de `pr_merge` ou ao informar que esta aguardando CI.',
+      description: `So o estado de CI do head de um PR, e se esta verde. Use como porta antes de \`${refTool('pr_merge')}\` ou ao informar que esta aguardando CI.`,
       args: { pr: prArg, repo: repoArgHere },
       async execute(args) {
         const repo = resolve(args.repo);
@@ -286,8 +286,7 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
     }),
 
     pr_files: tool({
-      description:
-        'Arquivos alterados de um PR com adicoes e delecoes em numero de linhas. Para ver o conteudo do diff, use `pr_diff`.',
+      description: `Arquivos alterados de um PR com adicoes e delecoes em numero de linhas. Para ver o conteudo do diff, use \`${refTool('pr_diff')}\`.`,
       args: { pr: prArg, repo: repoArgHere },
       async execute(args) {
         const repo = resolve(args.repo);
@@ -329,8 +328,7 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
     }),
 
     pr_create: tool({
-      description:
-        'Abre um PR. A descricao passa pela checagem de prosa. Use para branches que moram em branch propria; `pr_list` mostra o que ja esta aberto.',
+      description: `Abre um PR. A descricao passa pela checagem de prosa. Use para branches que moram em branch propria; \`${refTool('pr_list')}\` mostra o que ja esta aberto.`,
       args: {
         head: tool.schema.string().describe('Branch de origem (head).'),
         base: tool.schema.string().describe('Branch de destino.'),
@@ -408,7 +406,7 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
             .join(' | ');
           throw new Error(
             `CI nao verde em ${repo}#${n} (${overall}) - ${detail}.\n` +
-              'Aguarde com `ci_wait` ou `pr_checks`. Para mergear mesmo assim, chame de novo com force: true e explique o porquao.'
+              `Aguarde com \`${refTool('ci_wait')}\` ou \`${refTool('pr_checks')}\`. Para mergear mesmo assim, chame de novo com force: true e explique o porquao.`
           );
         }
 
@@ -496,7 +494,7 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
           `${repos.length} repo(s), ${okCount} verde(s), ${failCount} nao verde(s)`,
           ...rows,
           '',
-          'Esta tool nao mergeia. Use `pr_merge` por repo, ou repita aqui so para acompanhar.',
+          `Esta tool nao mergeia. Use \`${refTool('pr_merge')}\` por repo, ou repita aqui so para acompanhar.`,
         ].join('\n');
       },
     }),

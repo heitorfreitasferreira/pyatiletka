@@ -73,7 +73,7 @@ export async function registerHooks(
   await ctx.session.hook('compaction', async (event) => {
     const b = await binding.read(event.sessionID);
     if (!b) return;
-    event.system.push({ type: 'text', text: compactionNote(b) });
+    event.system.push({ type: 'text', text: compactionNote(b, core.toolPrefix) });
   });
 
   const push = createPushHook({ ctx: core, directory });

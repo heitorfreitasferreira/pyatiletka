@@ -1,5 +1,5 @@
 import { tool } from '@opencode-ai/plugin';
-import { toolSpecs, type ToolSpec } from './spec';
+import { toolRef, toolSpecs, type ToolSpec } from './spec';
 import { assertProse } from '../prose';
 import { expandRepos, parseRef, parseRefs, pickRepo, type Ctx } from '../core/context';
 import { fileBinding, type BindingStore } from '../core/binding';
@@ -18,6 +18,8 @@ export type IssueToolsInput = {
   directory: string;
   /** Store do vinculo. Sem ele, arquivo em `<directory>/.opencode/.state`. */
   binding?: BindingStore;
+  /** Sobrepoe `ctx.stateDir` para o store de arquivo. */
+  stateDir?: string;
 };
 
 const repoArg = (ctx: Ctx) =>
@@ -43,7 +45,9 @@ async function target(
   const repo = pickRepo(ctx, args.repo, binding);
   const n = parseRef(args.issue ?? binding?.issue);
   if (!Number.isFinite(n)) {
-    throw new Error('Nenhuma issue informada nem vinculada a sessao. Use `issue_bind` primeiro.');
+    throw new Error(
+      `Nenhuma issue informada nem vinculada a sessao. Use \`${toolRef(ctx.toolPrefix, 'issue_bind')}\` primeiro.`
+    );
   }
   return { repo, n };
 }
@@ -69,10 +73,11 @@ async function milestoneDeps(ctx: Ctx, repo: string, items: Issue[]): Promise<De
   return { inside, outside };
 }
 
-export function issueTools({ ctx, directory, binding }: IssueToolsInput): ToolSpec[] {
+export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInput): ToolSpec[] {
   const repoArgHere = repoArg(ctx);
   const resolve = (arg?: string) => pickRepo(ctx, arg);
-  const store = binding ?? fileBinding(directory);
+  const store = binding ?? fileBinding(directory, stateDir ?? ctx.stateDir);
+  const refTool = (name: string) => toolRef(ctx.toolPrefix, name);
 
   return toolSpecs({
     issue_bind: tool({
@@ -275,8 +280,7 @@ export function issueTools({ ctx, directory, binding }: IssueToolsInput): ToolSp
     }),
 
     issue_template_list: tool({
-      description:
-        'Lista os templates de issue do repo (.gitea/issue_template/ e .github/ISSUE_TEMPLATE/) com o conteudo de cada um. Use antes de `issue_create` para saber o formato de `objetivo` e `criterios` que o plugin le.',
+      description: `Lista os templates de issue do repo (.gitea/issue_template/ e .github/ISSUE_TEMPLATE/) com o conteudo de cada um. Use antes de \`${refTool('issue_create')}\` para saber o formato de \`objetivo\` e \`criterios\` que o plugin le.`,
       args: { repo: repoArgHere },
       async execute(args) {
         const repo = resolve(args.repo);
@@ -284,7 +288,7 @@ export function issueTools({ ctx, directory, binding }: IssueToolsInput): ToolSp
         if (!all.length) {
           return (
             `Nenhum template em ${repo}: .gitea/issue_template/ e .github/ISSUE_TEMPLATE/ nao existem. ` +
-            '`issue_create` funciona sem template, mas o corpo sai sem as secoes que o `milestone_view` le.'
+            `\`${refTool('issue_create')}\` funciona sem template, mas o corpo sai sem as secoes que o \`${refTool('milestone_view')}\` le.`
           );
         }
         return all
@@ -304,8 +308,7 @@ export function issueTools({ ctx, directory, binding }: IssueToolsInput): ToolSp
     }),
 
     issue_create: tool({
-      description:
-        'Cria uma issue (task) no repo. Com `template` e sem `body`, monta o corpo a partir dos campos. `depende` grava as dependencias na secao de dependencias da API, que e o que o `milestone_view` le para montar a fila. O texto passa pela checagem de prosa: travessao, ponto e virgula e frases de formula sao recusados.',
+      description: `Cria uma issue (task) no repo. Com \`template\` e sem \`body\`, monta o corpo a partir dos campos. \`depende\` grava as dependencias na secao de dependencias da API, que e o que o \`${refTool('milestone_view')}\` le para montar a fila. O texto passa pela checagem de prosa: travessao, ponto e virgula e frases de formula sao recusados.`,
       args: {
         title: tool.schema.string(),
         body: tool.schema
@@ -402,8 +405,7 @@ export function issueTools({ ctx, directory, binding }: IssueToolsInput): ToolSp
     }),
 
     issue_depend: tool({
-      description:
-        'Gerencia as dependencias de uma issue, as mesmas da secao Dependencias da UI. `add` faz a issue esperar pelas citadas, `remove` tira a aresta. E o que o `milestone_view` le para montar a fila do marco, entao nao escreva dependencias como texto no corpo.',
+      description: `Gerencia as dependencias de uma issue, as mesmas da secao Dependencias da UI. \`add\` faz a issue esperar pelas citadas, \`remove\` tira a aresta. E o que o \`${refTool('milestone_view')}\` le para montar a fila do marco, entao nao escreva dependencias como texto no corpo.`,
       args: {
         issue: issueArg,
         add: tool.schema
@@ -567,8 +569,7 @@ export function issueTools({ ctx, directory, binding }: IssueToolsInput): ToolSp
     }),
 
     milestone_list: tool({
-      description:
-        'Lista marcos com contagem (fechadas/total) e descricao resumida. Passe `milestone` (id ou titulo parcial) para resolver um so. Para ver as issues e a fila de dependencias, use `milestone_view`.',
+      description: `Lista marcos com contagem (fechadas/total) e descricao resumida. Passe \`milestone\` (id ou titulo parcial) para resolver um so. Para ver as issues e a fila de dependencias, use \`${refTool('milestone_view')}\`.`,
       args: {
         repo: repoArgHere,
         state: tool.schema.enum(['open', 'closed', 'all']).optional(),

@@ -1,7 +1,14 @@
 {
   "packages": {
     ".": {
-      "extra-files": ["src/version.ts"]
+      "extra-files": [
+        "src/version.ts",
+        {
+          "type": "json",
+          "path": "claude/pyatiletka/.claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   },
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",

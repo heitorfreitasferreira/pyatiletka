@@ -1,0 +1,13 @@
+{
+  "name": "pyatiletka",
+  "displayName": "pyatiletka",
+  "version": "2.0.2",
+  "description": "Fluxo de issues, marcos, PRs e CI para agentes, em Gitea e GitHub. Vincula a sessao a uma issue, injeta o corpo e os comentarios a cada turno, espera o CI depois do push e recusa prosa enrolada.",
+  "author": {
+    "name": "Heitor Freitas"
+  },
+  "homepage": "https://github.com/heitorfreitasferreira/pyatiletka",
+  "repository": "https://github.com/heitorfreitasferreira/pyatiletka",
+  "license": "MIT",
+  "keywords": ["issues", "milestones", "pull-requests", "gitea", "github", "ci", "mcp"]
+}

@@ -54,3 +54,13 @@ export function toolSpecs(defs: Record<string, ToolDefinition>): ToolSpec[] {
 export function toolName(spec: ToolSpec): string {
   return `${spec.group}_${spec.name}`;
 }
+
+/**
+ * Nome da tool como o modelo do host a le. No opencode e o nome puro. No Claude
+ * Code a tool chega prefixada (`mcp__pyatiletka__issue_bind`), entao o texto que
+ * aponta uma tool para o agente precisa do mesmo prefixo, senao o agente
+ * procura um nome que nao existe.
+ */
+export function toolRef(prefix: string | undefined, name: string): string {
+  return `${prefix ?? ''}${name}`;
+}

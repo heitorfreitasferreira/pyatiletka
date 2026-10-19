@@ -4,6 +4,10 @@
 
 ### Features
 
+* suporte ao Claude Code pelo mesmo pacote: plugin com servidor MCP, que expoe as 38 tools, e hooks de contexto e de espera do CI
+* binario `pyatiletka`, com `mcp` para o servidor stdio e `hook <evento>` para os eventos do Claude Code
+* vinculo por diretorio do projeto no Claude Code, porque o servidor MCP nao recebe identificador de sessao por chamada
+* `PYATILETKA_STATE_DIR` e `PYATILETKA_TOOL_PREFIX` para ajustar o estado e o nome das tools no texto do agente
 * suporte a opencode v1 e v2 no mesmo pacote, com o v2 registrando as tools por namespace
 * opcoes do plugin no v2 via `plugins` do `opencode.json`, sobrepondo o ambiente
 * vinculo de sessao no storage do v2, mantendo o arquivo no v1
@@ -11,10 +15,12 @@
 ### Code Refactoring
 
 * tools em uma spec neutra, consumida por um adaptador v1 e um adaptador v2
+* texto que aponta uma tool passa por `toolRef`, com prefixo por host
 
 ### Build System
 
 * `@opencode/plugin` entra como dependencia e fica external no bundle
+* `dist/cli.js`, o binario do servidor MCP e dos hooks, buildado com alvo node
 
 ## [2.0.2](https://github.com/heitorfreitasferreira/pyatiletka/compare/v2.0.1...v2.0.2) (2026-10-09)
 

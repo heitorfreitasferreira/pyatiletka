@@ -1,6 +1,7 @@
 import { errorLines } from '../core/logs';
 import type { Ctx } from '../core/context';
 import { isRealPush, latestRun, pushedBranch, waitRun } from './pipeline';
+import { toolRef } from './spec';
 
 /**
  * Espera automatica depois de um `git push`.
@@ -88,7 +89,11 @@ export function createPushHook({
     const errs = errorLines(log);
     output.output +=
       `\n\n[pipeline] ${shortName} run #${done.id} ${done.conclusion}: o push NAO passou pelo CI.\n` +
-      `${errs.length ? errs.map((l) => `  ${l}`).join('\n') : '  (use `ci_logs` para ver o log)'}\n` +
+      `${
+        errs.length
+          ? errs.map((l) => `  ${l}`).join('\n')
+          : `  (use \`${toolRef(ctx.toolPrefix, 'ci_logs')}\` para ver o log)`
+      }\n` +
       `  ${done.url ?? ''}`;
     ctx.notify(`Pipeline ${shortName} #${done.id} ${done.conclusion}`, 'error');
   };

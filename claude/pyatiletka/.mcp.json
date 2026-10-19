@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pyatiletka": {
+      "command": "npx",
+      "args": ["-y", "pyatiletka@latest", "mcp"]
+    }
+  }
+}
