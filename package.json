@@ -1,6 +1,6 @@
 {
   "name": "pyatiletka",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "Fluxo de issues, milestones e PRs para agentes: binding de sessao, fila de dependencias e gate de prosa. Plugin para opencode e plugin mais servidor MCP para o Claude Code. Suporta Gitea e GitHub.",
   "author": {
     "name": "Heitor Freitas",
