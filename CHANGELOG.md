@@ -22,6 +22,18 @@
 * `@opencode/plugin` entra como dependencia e fica external no bundle
 * `dist/cli.js`, o binario do servidor MCP e dos hooks, buildado com alvo node
 
+## [2.1.0](https://github.com/heitorfreitasferreira/pyatiletka/compare/v2.0.2...v2.1.0) (2026-10-22)
+
+
+### Features
+
+* Claude Code pelo mesmo pacote, com servidor MCP e hooks ([6b3ff77](https://github.com/heitorfreitasferreira/pyatiletka/commit/6b3ff770d2c7d7272505bec8ee9d454f27b0676c))
+
+
+### Bug Fixes
+
+* entrypoint v1 repassa as options do opencode.json ([02de25a](https://github.com/heitorfreitasferreira/pyatiletka/commit/02de25ae9e13efc03684dded65ecee30cc5291b1))
+
 ## [2.0.2](https://github.com/heitorfreitasferreira/pyatiletka/compare/v2.0.1...v2.0.2) (2026-10-09)
 
 
