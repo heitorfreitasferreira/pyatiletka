@@ -39,11 +39,16 @@ export type HookDeps = {
   ctx?: Ctx;
 };
 
-type Resolved = { ctx: Ctx; directory: string; stateDir: string };
+/**
+ * `directory` e onde o evento aconteceu (o push roda ali). `projectDir` e a raiz
+ * do projeto, a mesma chave com que o servidor MCP grava o vinculo.
+ */
+type Resolved = { ctx: Ctx; directory: string; projectDir: string; stateDir: string };
 
 function resolve(input: HookInput, deps: HookDeps): Resolved {
   const env = deps.env ?? process.env;
   const directory = deps.cwd ?? (input.cwd?.trim() || claudeProjectDir(env));
+  const projectDir = deps.cwd ?? claudeProjectDir(env, input.cwd?.trim() || process.cwd());
   const stateDir = deps.stateDir ?? claudeStateDir(env);
   const ctx =
     deps.ctx ??
@@ -53,7 +58,7 @@ function resolve(input: HookInput, deps: HookDeps): Resolved {
       toolPrefix: claudeToolPrefix(env),
       stateDir,
     });
-  return { ctx, directory, stateDir };
+  return { ctx, directory, projectDir, stateDir };
 }
 
 function hookOut(input: HookInput, text: string): HookOutput {
@@ -73,8 +78,8 @@ export async function contextHook(
   input: HookInput,
   deps: HookDeps = {}
 ): Promise<HookOutput | undefined> {
-  const { ctx, directory, stateDir } = resolve(input, deps);
-  const b = readBinding(directory, WORKSPACE_KEY, stateDir);
+  const { ctx, projectDir, stateDir } = resolve(input, deps);
+  const b = readBinding(projectDir, WORKSPACE_KEY, stateDir);
   if (!b) return undefined;
   return hookOut(input, await buildSystemHead(ctx, b));
 }

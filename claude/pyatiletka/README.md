@@ -29,11 +29,15 @@ precisa de `node` e `npm` no PATH.
 
 ## Vinculo
 
-`issue_bind` vale para o projeto. O arquivo fica em
-`<projeto>/.claude/.state/pyatiletka/workspace.json`.
+`issue_bind` vale para o projeto. Com o plugin instalado, o arquivo fica em
+`$CLAUDE_PLUGIN_DATA/state/<projeto>/workspace.json`, onde `<projeto>` e o
+caminho do projeto com `/` trocado por `-`. Dois projetos abertos ao mesmo tempo
+tem vinculos separados.
 
-Ponha `.claude/.state` no `.gitignore` do projeto, ou aponte
-`PYATILETKA_STATE_DIR` para um caminho absoluto fora do clone.
+Sem o plugin, o arquivo fica em
+`<projeto>/.claude/.state/pyatiletka/workspace.json`. Ponha `.claude/.state` no
+`.gitignore` do projeto, ou aponte `PYATILETKA_STATE_DIR` para um caminho
+absoluto fora do clone.
 
 ## Nomes das tools
 

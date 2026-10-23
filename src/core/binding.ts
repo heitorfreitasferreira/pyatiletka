@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 /**
  * Vinculo entre a sessao do agente e uma issue.
@@ -27,11 +27,22 @@ export type Binding = {
 };
 
 /**
- * `stateDir` absoluto vence o `directory`, entao um host pode guardar o estado
- * fora do clone. Com o valor padrao o resultado e o mesmo de antes.
+ * Pasta do projeto dentro de um `stateDir` absoluto: o caminho do projeto com
+ * todo caractere fora de `[A-Za-z0-9]` trocado por `-`, como o Claude Code faz
+ * em `~/.claude/projects`.
+ */
+export function projectKey(directory: string): string {
+  return resolve(directory).replace(/[^A-Za-z0-9]/g, '-');
+}
+
+/**
+ * `stateDir` relativo fica dentro do projeto. `stateDir` absoluto (o
+ * `CLAUDE_PLUGIN_DATA` do plugin, comum a todos os projetos) ganha uma pasta por
+ * projeto, senao dois projetos abertos ao mesmo tempo dividiriam um vinculo.
  */
 export function bindingFile(directory: string, sessionID: string, stateDir = STATE_DIR): string {
-  return resolve(directory, stateDir, `${sessionID}.json`);
+  if (!isAbsolute(stateDir)) return resolve(directory, stateDir, `${sessionID}.json`);
+  return join(stateDir, projectKey(directory), `${sessionID}.json`);
 }
 
 /** Vinculo da sessao. `undefined` quando nao ha, e tambem quando o JSON esta ruim. */

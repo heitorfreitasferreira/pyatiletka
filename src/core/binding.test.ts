@@ -36,8 +36,20 @@ describe('bindingFile', () => {
     );
   });
 
-  it('stateDir absoluto ignora o diretorio base', () => {
-    expect(bindingFile('/w', 'ses_1', '/estado')).toBe('/estado/ses_1.json');
+  it('stateDir absoluto ganha uma pasta por projeto', () => {
+    expect(bindingFile('/home/u/infra-k3s', 'ses_1', '/estado')).toBe(
+      '/estado/-home-u-infra-k3s/ses_1.json'
+    );
+  });
+
+  it('stateDir absoluto separa projetos que dividem o mesmo estado', () => {
+    const estado = join(dir, 'plugin-data', 'state');
+    const a = join(dir, 'infra-k3s');
+    const d = join(dir, 'infra-docs');
+    writeBinding(a, WORKSPACE_KEY, { repo: 'org/k3s', issue: 1, boundAt: 't' }, estado);
+    writeBinding(d, WORKSPACE_KEY, { repo: 'org/k3s', issue: 2, boundAt: 't' }, estado);
+    expect(readBinding(a, WORKSPACE_KEY, estado)?.issue).toBe(1);
+    expect(readBinding(d, WORKSPACE_KEY, estado)?.issue).toBe(2);
   });
 });
 

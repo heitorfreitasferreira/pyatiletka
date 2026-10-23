@@ -94,6 +94,28 @@ describe('contextHook', () => {
     expect(text).not.toContain('`issue_comment`');
   });
 
+  it('le o vinculo pela raiz do projeto quando o evento vem de uma subpasta', async () => {
+    bind({ repo: REPO, issue: 7 });
+    const out = await contextHook(
+      { hook_event_name: 'UserPromptSubmit', cwd: join(dir, 'apps') },
+      { ctx: ctxFor(host), stateDir, env: { CLAUDE_PROJECT_DIR: dir } }
+    );
+    expect(out?.hookSpecificOutput.additionalContext).toContain('org/repo#7');
+  });
+
+  it('cada projeto le o proprio vinculo com o estado do plugin', async () => {
+    const pluginState = join(dir, 'plugin-data', 'state');
+    const outro = join(dir, 'outro-projeto');
+    writeBinding(dir, WORKSPACE_KEY, { repo: REPO, issue: 7, boundAt: 't' }, pluginState);
+    const deps2 = (projectDir: string) => ({
+      ctx: ctxFor(host),
+      stateDir: pluginState,
+      env: { CLAUDE_PROJECT_DIR: projectDir },
+    });
+    expect(await contextHook({}, deps2(dir))).toBeDefined();
+    expect(await contextHook({}, deps2(outro))).toBeUndefined();
+  });
+
   it('falha ao ler a issue vira aviso, nao excecao', async () => {
     bind({ repo: REPO, issue: 7 });
     host.fail.set('getIssue', new Error('500 do servidor'));
