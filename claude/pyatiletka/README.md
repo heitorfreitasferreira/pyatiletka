@@ -29,13 +29,24 @@ precisa de `node` e `npm` no PATH.
 
 ## Vinculo
 
-`issue_bind` vale para o projeto. Com o plugin instalado, o arquivo fica em
-`$CLAUDE_PLUGIN_DATA/state/<projeto>/workspace.json`, onde `<projeto>` e o
-caminho do projeto com `/` trocado por `-`. Dois projetos abertos ao mesmo tempo
-tem vinculos separados.
+`issue_bind` vale para a sessao. Com o plugin instalado, o arquivo fica em
+`$CLAUDE_PLUGIN_DATA/state/<projeto>/<sessao>.json`, onde `<projeto>` e o
+caminho do projeto com `/` trocado por `-` e `<sessao>` e o id da sessao do
+Claude Code. Varias janelas no mesmo projeto, no terminal ou no editor, tem
+vinculos separados. `--resume` mantem o id, entao a sessao retomada volta com o
+vinculo.
+
+O `/clear` troca de sessao sem reiniciar o servidor MCP, e o `tools/call` nao
+diz qual e a sessao nova. Por isso o hook grava `proc-<CLAUDE_PID>.json` com a
+sessao atual, e o servidor sobe pelos processos pais ate achar esse arquivo. No
+`/clear` o hook copia o vinculo da sessao anterior para a nova, entao o `/clear`
+nao desfaz o vinculo.
+
+Sem esse arquivo o servidor usa o `CLAUDE_CODE_SESSION_ID` do proprio ambiente.
+Sem a variavel, o vinculo volta a ser do projeto, em `workspace.json`.
 
 Sem o plugin, o arquivo fica em
-`<projeto>/.claude/.state/pyatiletka/workspace.json`. Ponha `.claude/.state` no
+`<projeto>/.claude/.state/pyatiletka/<sessao>.json`. Ponha `.claude/.state` no
 `.gitignore` do projeto, ou aponte `PYATILETKA_STATE_DIR` para um caminho
 absoluto fora do clone.
 

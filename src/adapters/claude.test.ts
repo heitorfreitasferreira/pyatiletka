@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import {
   CLAUDE_STATE_DIR,
   CLAUDE_TOOL_PREFIX,
+  claudeBindingKey,
   claudeProjectDir,
   claudeSessionID,
   claudeStateDir,
@@ -65,7 +66,18 @@ describe('claudeSessionID', () => {
     expect(claudeSessionID({ CLAUDE_CODE_SESSION_ID: 'ses_9' })).toBe('ses_9');
   });
 
-  it('tem rotulo fixo sem a variavel, porque o vinculo e do workspace', () => {
-    expect(claudeSessionID({})).toBe('claude');
+  it('sem a variavel nao inventa sessao', () => {
+    expect(claudeSessionID({})).toBeUndefined();
+    expect(claudeSessionID({ CLAUDE_CODE_SESSION_ID: '  ' })).toBeUndefined();
+  });
+});
+
+describe('claudeBindingKey', () => {
+  it('o vinculo e da sessao quando o host diz qual e', () => {
+    expect(claudeBindingKey({ CLAUDE_CODE_SESSION_ID: 'ses_9' })).toBe('ses_9');
+  });
+
+  it('sem sessao volta ao vinculo do projeto', () => {
+    expect(claudeBindingKey({})).toBe('workspace');
   });
 });
