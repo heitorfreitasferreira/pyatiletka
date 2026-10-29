@@ -1,5 +1,11 @@
-import { claudeProjectDir, claudeStateDir, claudeToolPrefix } from '../adapters/claude';
-import { WORKSPACE_KEY, readBinding } from '../core/binding';
+import {
+  claudeBindingKey,
+  claudeProjectDir,
+  claudeStateDir,
+  claudeToolPrefix,
+} from '../adapters/claude';
+import { claudePid, trackSession } from '../adapters/claude-session';
+import { readBinding } from '../core/binding';
 import { createCtx, type Ctx } from '../core/context';
 import { buildSystemHead } from '../core/session';
 import { isRealPush } from '../tools/pipeline';
@@ -43,7 +49,13 @@ export type HookDeps = {
  * `directory` e onde o evento aconteceu (o push roda ali). `projectDir` e a raiz
  * do projeto, a mesma chave com que o servidor MCP grava o vinculo.
  */
-type Resolved = { ctx: Ctx; directory: string; projectDir: string; stateDir: string };
+type Resolved = {
+  ctx: Ctx;
+  directory: string;
+  projectDir: string;
+  stateDir: string;
+  env: NodeJS.ProcessEnv;
+};
 
 function resolve(input: HookInput, deps: HookDeps): Resolved {
   const env = deps.env ?? process.env;
@@ -58,7 +70,7 @@ function resolve(input: HookInput, deps: HookDeps): Resolved {
       toolPrefix: claudeToolPrefix(env),
       stateDir,
     });
-  return { ctx, directory, projectDir, stateDir };
+  return { ctx, directory, projectDir, stateDir, env };
 }
 
 function hookOut(input: HookInput, text: string): HookOutput {
@@ -71,15 +83,19 @@ function hookOut(input: HookInput, text: string): HookOutput {
 }
 
 /**
- * Contexto do turno a partir do vinculo do workspace. Sem vinculo nao ha o que
+ * Contexto do turno a partir do vinculo da sessao. Sem vinculo nao ha o que
  * injetar, e o hook devolve nada em vez de um texto vazio.
  */
 export async function contextHook(
   input: HookInput,
   deps: HookDeps = {}
 ): Promise<HookOutput | undefined> {
-  const { ctx, projectDir, stateDir } = resolve(input, deps);
-  const b = readBinding(projectDir, WORKSPACE_KEY, stateDir);
+  const { ctx, projectDir, stateDir, env } = resolve(input, deps);
+  // O stdin traz a sessao atual. O ambiente pode estar no valor de antes do `/clear`.
+  const session = input.session_id?.trim() || claudeBindingKey(env);
+  const pid = claudePid(env);
+  if (pid && input.session_id?.trim()) trackSession(projectDir, stateDir, pid, session);
+  const b = readBinding(projectDir, session, stateDir);
   if (!b) return undefined;
   return hookOut(input, await buildSystemHead(ctx, b));
 }

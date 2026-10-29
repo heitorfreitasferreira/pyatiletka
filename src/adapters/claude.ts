@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { WORKSPACE_KEY } from '../core/binding';
 
 /**
  * Adaptador do Claude Code. O host nao chama funcao nossa no processo dele: as
@@ -8,8 +9,8 @@ import { join } from 'node:path';
  *
  * `CLAUDE_PROJECT_DIR` chega no servidor MCP stdio e no processo de hook.
  * `CLAUDE_PLUGIN_DATA` so existe quando o servidor vem de dentro do plugin.
- * `CLAUDE_CODE_SESSION_ID` fica congelado no valor do spawn do servidor MCP,
- * entao o vinculo aqui e do workspace, nao da sessao. Ver `workspaceBinding`.
+ * `CLAUDE_CODE_SESSION_ID` chega no servidor MCP e no hook, e cada sessao sobe
+ * o proprio servidor. O vinculo e da sessao. Ver `claudeBindingKey`.
  */
 
 /**
@@ -52,7 +53,16 @@ export function claudeStateDir(env: NodeJS.ProcessEnv = process.env): string {
   return CLAUDE_STATE_DIR;
 }
 
-/** Sessao do Claude Code, quando o ambiente tem uma. Serve so de rotulo. */
-export function claudeSessionID(env: NodeJS.ProcessEnv = process.env): string {
-  return env.CLAUDE_CODE_SESSION_ID?.trim() || 'claude';
+/** Sessao do Claude Code, ou `undefined` quando o host nao exporta a variavel. */
+export function claudeSessionID(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.CLAUDE_CODE_SESSION_ID?.trim() || undefined;
+}
+
+/**
+ * Nome do arquivo do vinculo. O servidor MCP e o hook leem a mesma variavel, entao
+ * gravam e leem o mesmo arquivo. No servidor a variavel fica no valor do spawn
+ * e nao muda com `/clear`. Sem a variavel, o vinculo volta a ser do projeto.
+ */
+export function claudeBindingKey(env: NodeJS.ProcessEnv = process.env): string {
+  return claudeSessionID(env) ?? WORKSPACE_KEY;
 }

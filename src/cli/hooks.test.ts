@@ -116,6 +116,34 @@ describe('contextHook', () => {
     expect(await contextHook({}, deps2(outro))).toBeUndefined();
   });
 
+  it('cada sessao le o proprio vinculo', async () => {
+    writeBinding(dir, 'ses_a', { repo: REPO, issue: 7, boundAt: 't' }, stateDir);
+    bind({ repo: REPO, issue: 9 });
+    const sessao = (id: string) => ({
+      ctx: ctxFor(host),
+      cwd: dir,
+      stateDir,
+      env: { CLAUDE_CODE_SESSION_ID: id },
+    });
+    const a = await contextHook({ session_id: 'ses_a' }, sessao('ses_a'));
+    expect(a?.hookSpecificOutput.additionalContext).toContain('org/repo#7');
+    expect(await contextHook({ session_id: 'ses_b' }, sessao('ses_b'))).toBeUndefined();
+  });
+
+  it('depois de /clear le pelo stdin e leva o vinculo para a sessao nova', async () => {
+    writeBinding(dir, 'ses_a', { repo: REPO, issue: 7, boundAt: 't' }, stateDir);
+    // O ambiente do processo ainda diz ses_a, o stdin ja diz ses_b.
+    const d = {
+      ctx: ctxFor(host),
+      cwd: dir,
+      stateDir,
+      env: { CLAUDE_CODE_SESSION_ID: 'ses_a', CLAUDE_PID: '4242' },
+    };
+    await contextHook({ session_id: 'ses_a', source: 'startup' }, d);
+    const out = await contextHook({ session_id: 'ses_b', source: 'clear' }, d);
+    expect(out?.hookSpecificOutput.additionalContext).toContain('org/repo#7');
+  });
+
   it('falha ao ler a issue vira aviso, nao excecao', async () => {
     bind({ repo: REPO, issue: 7 });
     host.fail.set('getIssue', new Error('500 do servidor'));

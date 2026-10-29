@@ -64,6 +64,41 @@ describe('createHandler', () => {
     expect(existsSync(file)).toBe(false);
   });
 
+  it('cada sessao tem o proprio vinculo no mesmo projeto', async () => {
+    const sessao = (id: string) =>
+      createHandler({ directory: dir, env: { ...env(), CLAUDE_CODE_SESSION_ID: id } }).handler;
+    const file = bindingFile(dir, 'ses_a', stateDir);
+    mkdirSync(join(dir, stateDir), { recursive: true });
+    writeFileSync(file, `${JSON.stringify({ repo: 'org/repo', issue: 7, boundAt: 't' })}\n`);
+    bindWorkspace();
+
+    const ver = (h: ReturnType<typeof sessao>) =>
+      h.run(h.specs.find((s) => toolName(s) === 'issue_binding') as never, {});
+    expect(await ver(sessao('ses_b'))).toContain('Nenhuma issue vinculada');
+
+    const a = sessao('ses_a');
+    await a.run(a.specs.find((s) => toolName(s) === 'issue_unbind') as never, {});
+    expect(existsSync(file)).toBe(false);
+  });
+
+  it('segue o ponteiro do hook em vez da sessao do spawn', async () => {
+    const { trackSession } = await import('../adapters/claude-session');
+    const pais: Record<number, number> = { 300: 200, 200: 100 };
+    trackSession(dir, stateDir, 100, 'ses_nova');
+    writeFileSync(
+      bindingFile(dir, 'ses_nova', stateDir),
+      `${JSON.stringify({ repo: 'org/repo', issue: 8, boundAt: 't' })}\n`
+    );
+    const { handler } = createHandler({
+      directory: dir,
+      env: { ...env(), CLAUDE_CODE_SESSION_ID: 'ses_spawn' },
+      pid: 300,
+      parentOf: (p) => pais[p],
+    });
+    const ver = handler.specs.find((s) => toolName(s) === 'issue_binding');
+    expect(await handler.run(ver as never, {})).toContain('issue=8');
+  });
+
   it('sem vinculo responde que nao ha nada', async () => {
     const { handler } = createHandler({ directory: dir, env: env() });
     const binding = handler.specs.find((s) => toolName(s) === 'issue_binding');

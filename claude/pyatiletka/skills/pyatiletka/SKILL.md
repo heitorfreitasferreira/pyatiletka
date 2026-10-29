@@ -12,12 +12,13 @@ vem do seu proprio `.mcp.json`, fora do plugin.
 
 ## Vinculo da issue
 
-`issue_bind` liga o projeto a uma issue. Depois disso, todo turno recebe o corpo
+`issue_bind` liga a sessao a uma issue. Depois disso, todo turno recebe o corpo
 e os comentarios da issue, e os comentarios sao o log de trabalho: leia antes de
 agir.
 
 - Chame `issue_bind` ao comecar ou ao retomar trabalho.
-- O vinculo vale para o **projeto**, nao para a conversa. `/clear` nao desfaz.
+- O vinculo vale para a **sessao**. Outras sessoes no mesmo projeto tem o
+  proprio vinculo. `/clear` nao desfaz.
 - `issue_binding` mostra o vinculo atual e `issue_unbind` limpa.
 - Ao trocar de issue, chame `issue_bind` de novo: o vinculo anterior e
   substituido.
