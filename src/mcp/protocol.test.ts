@@ -184,8 +184,8 @@ describe('schema das tools reais', () => {
 
   const specs = createToolSpecs({ ctx, directory: '/w' });
 
-  it('as 39 tools viram JSON Schema de objeto', () => {
-    expect(specs).toHaveLength(39);
+  it('as 41 tools viram JSON Schema de objeto', () => {
+    expect(specs).toHaveLength(41);
     for (const spec of specs) {
       const schema = toInputSchema(spec.args);
       expect(schema.type, toolName(spec)).toBe('object');

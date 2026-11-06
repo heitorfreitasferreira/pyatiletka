@@ -74,7 +74,7 @@ function readProse(env: NodeJS.ProcessEnv): ProseMode {
 
 /**
  * Provider: `PYATILETKA_PROVIDER` manda. Sem ele, o remote do clone decide, e por
- * ultimo o ambiente (GITEA_URL presente, senao GITHUB_TOKEN).
+ * ultimo o ambiente (GITEA_URL/GITEA_TOKEN ou GITHUB_TOKEN/GH_TOKEN).
  */
 export function resolveProvider(
   env: NodeJS.ProcessEnv,
@@ -90,6 +90,8 @@ export function resolveProvider(
   if (remoteProvider) return remoteProvider;
   if (env.GITEA_URL) return 'gitea';
   if (env.GITHUB_TOKEN || env.GH_TOKEN) return 'github';
+  // Se tem token de Gitea, assume Gitea. Se tem token de GitHub, assume GitHub.
+  if (env.GITEA_TOKEN) return 'gitea';
   return undefined;
 }
 

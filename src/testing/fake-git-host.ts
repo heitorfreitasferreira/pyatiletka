@@ -133,6 +133,33 @@ export class FakeGitHost implements GitHost {
     return this.record('getRepo', [repo], { defaultBranch: this.state.defaultBranch });
   }
 
+  async getRepoFile(
+    repo: string,
+    path: string,
+    ref?: string
+  ): Promise<{
+    content: string;
+    encoding: 'base64' | 'text';
+    size: number;
+    type: 'file' | 'dir';
+    name: string;
+  }> {
+    this.note('getRepoFile', [repo, path, ref]);
+    // Return a fake base64 encoded content
+    const content = Buffer.from(`conteudo de ${path} @ ${ref ?? 'default'}`).toString('base64');
+    return {
+      content,
+      encoding: 'base64',
+      size: content.length,
+      type: 'file',
+      name: path.split('/').pop() ?? path,
+    };
+  }
+
+  async listLabels(repo: string): Promise<string[]> {
+    return this.record('listLabels', [repo], ['Priority/Medium', 'Kind/Bug', 'Status/Todo']);
+  }
+
   async getIssue(repo: string, n: number): Promise<Issue> {
     return this.record('getIssue', [repo, n], this.issue(n));
   }
@@ -357,6 +384,34 @@ export class FakeGitHost implements GitHost {
     return this.record('getActionsConfig', [repo], this.state.actions);
   }
 
+  async upsertActionsVariable(repo: string, name: string, value: string): Promise<void> {
+    this.note('upsertActionsVariable', [repo, name, value]);
+    const existing = this.state.actions.variables.find((v) => v.name === name);
+    if (existing) {
+      existing.value = value;
+    } else {
+      this.state.actions.variables.push({ name, value, lines: 1, chars: value.length });
+    }
+  }
+
+  async deleteActionsVariable(repo: string, name: string): Promise<void> {
+    this.note('deleteActionsVariable', [repo, name]);
+    this.state.actions.variables = this.state.actions.variables.filter((v) => v.name !== name);
+  }
+
+  async upsertActionsSecret(repo: string, name: string, value: string): Promise<void> {
+    this.note('upsertActionsSecret', [repo, name, value]);
+    const existing = this.state.actions.secrets.find((s) => s === name);
+    if (!existing) {
+      this.state.actions.secrets.push(name);
+    }
+  }
+
+  async deleteActionsSecret(repo: string, name: string): Promise<void> {
+    this.note('deleteActionsSecret', [repo, name]);
+    this.state.actions.secrets = this.state.actions.secrets.filter((s) => s !== name);
+  }
+
   async dispatchWorkflow(
     repo: string,
     workflow: string,
@@ -364,6 +419,18 @@ export class FakeGitHost implements GitHost {
     inputs?: Record<string, string>
   ): Promise<void> {
     this.note('dispatchWorkflow', [repo, workflow, ref, inputs]);
+  }
+
+  async listRepoRunners(repo: string): Promise<Runner[]> {
+    return this.record('listRepoRunners', [repo], this.state.runners);
+  }
+
+  async listOrgRunners(org: string): Promise<Runner[]> {
+    return this.record('listOrgRunners', [org], this.state.runners);
+  }
+
+  async listInstanceRunners(): Promise<Runner[]> {
+    return this.record('listInstanceRunners', [], this.state.runners);
   }
 
   async listRunners(repo: string): Promise<Runner[]> {

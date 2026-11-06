@@ -181,16 +181,20 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
 
     pr_view: tool({
       description:
-        'Detalhe de um PR: branch, sha, mergeavel, corpo, CI do head e TODOS os comentarios (conversa, reviews e inline): eles sao contexto obrigatorio, igual na issue.',
+        'Detalhe de um PR: branch, sha, mergeavel, corpo, CI do head e comentarios. Por padrao traz ultimos 3 comentarios de conversa e ultimas 3 reviews. Use `full: true` para tudo.',
       args: {
         pr: prArg,
         repo: repoArgHere,
         comments: tool.schema
-          .number()
+          .union([tool.schema.number(), tool.schema.string()])
           .optional()
           .describe(
-            'Quantos comentarios de conversa trazer, dos mais recentes. Default: todos. Use 0 para pular.'
+            'Quantos comentarios de conversa trazer: numero, "all" para todos, 0 para pular. Default: 3 (ultimos 3).'
           ),
+        full: tool.schema
+          .boolean()
+          .optional()
+          .describe('Default false: limita comentarios e reviews. True: tudo.'),
       },
       async execute(args) {
         const repo = resolve(args.repo);
@@ -225,13 +229,18 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
 
         if (pr.body) lines.push('', '--- corpo ---', pr.body.slice(0, 4000));
 
+        // Parse comments arg
+        let commentsLimit: number | 'all' = args.full ? 'all' : 3;
+        if (args.comments === 'all') commentsLimit = 'all';
+        else if (typeof args.comments === 'number') commentsLimit = args.comments;
+
         // Reviews primeiro: `comments` conta review junto com a conversa, entao
         // a guarda de corte precisa descontar os reviews antes de comparar.
         const reviews = await ctx.host.listReviews(repo, pr.number).catch(() => []);
 
-        if (args.comments !== 0) {
+        if (commentsLimit !== 0) {
           const all = await ctx.host.listComments(repo, pr.number).catch(() => []);
-          const shown = args.comments && args.comments > 0 ? all.slice(-args.comments) : all;
+          const shown = commentsLimit === 'all' ? all : all.slice(-commentsLimit);
           const expected = Math.max(0, (pr.comments ?? 0) - reviews.length);
           lines.push('', `--- comentarios (${all.length}) ---`);
           if (all.length < expected) {
@@ -241,11 +250,18 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
           }
           if (!all.length) lines.push('(nenhum)');
           for (const c of shown) lines.push('', fmtComment(c));
+          if (commentsLimit !== 'all' && all.length > commentsLimit) {
+            lines.push(
+              `  ... ${all.length - commentsLimit} comentario(s) mais antigo(s) omitidos. Use comments: "all" ou full: true para ver tudo.`
+            );
+          }
         }
 
-        if (reviews.length) {
+        const reviewsLimit = args.full ? reviews.length : Math.min(3, reviews.length);
+        if (reviewsLimit > 0) {
           lines.push('', `--- reviews (${reviews.length}) ---`);
-          for (const r of reviews) {
+          const shownReviews = reviews.slice(-reviewsLimit);
+          for (const r of shownReviews) {
             lines.push('', fmtReview(r), (r.body ?? '').trim() || '(sem corpo)');
             if ((r.commentsCount ?? 0) > 0) {
               const inline = await ctx.host
@@ -253,6 +269,11 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
                 .catch(() => []);
               for (const c of inline) lines.push(fmtReviewComment(c));
             }
+          }
+          if (!args.full && reviews.length > reviewsLimit) {
+            lines.push(
+              `  ... ${reviews.length - reviewsLimit} review(s) mais antiga(s) omitida(s). Use full: true para ver tudo.`
+            );
           }
         }
 
@@ -362,7 +383,7 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
 
     pr_merge: tool({
       description:
-        'Mergeia um PR. PORTA SEGURA: se houver check de CI em falha ou pendente, RECUSA por padrao, a nao ser que `force: true`. Estilos: merge, squash, rebase, fast-forward-only (o ultimo vira rebase no GitHub, que nao tem esse modo). `delete_branch` limpa a branch.',
+        'Mergeia um PR. PORTA SEGURA: se houver check de CI em falha ou pendente, RECUSA por padrao, a nao ser que `force: true`. Estilos: merge, squash, rebase, fast-forward-only (o ultimo vira rebase no GitHub, que nao tem esse modo). `delete_branch` limpa a branch. `wait_ci: true` espera o gate do PR ficar verde e, depois do merge, espera o run na branch de destino.',
       args: {
         pr: prArg,
         repo: repoArgHere,
@@ -375,6 +396,12 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
           .boolean()
           .optional()
           .describe('Ignorar a porta de CI verde (use com justificativa explicita).'),
+        wait_ci: tool.schema
+          .boolean()
+          .optional()
+          .describe(
+            'Default false. Se true, espera CI verde antes do merge e apos o merge espera o run na branch de destino.'
+          ),
       },
       async execute(args) {
         const repo = resolve(args.repo);
@@ -397,7 +424,22 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
 
         const checks = await checksOf(repo, pr);
         const { overall, ok, failed, pending } = statusOf(checks);
-        if (!ok && !args.force) {
+
+        if (args.wait_ci) {
+          // Espera CI verde antes do merge
+          if (!ok) {
+            const detail = [
+              failed.length ? `em falha: ${failed.map((s) => s.context).join(', ')}` : '',
+              pending.length ? `pendentes: ${pending.map((s) => s.context).join(', ')}` : '',
+            ]
+              .filter(Boolean)
+              .join(' | ');
+            throw new Error(
+              `CI nao verde em ${repo}#${n} (${overall}) - ${detail}.\n` +
+                `Aguarde com \`${refTool('ci_wait')}\` ou \`${refTool('pr_checks')}\`. Para mergear mesmo assim, chame de novo com force: true.`
+            );
+          }
+        } else if (!ok && !args.force) {
           const detail = [
             failed.length ? `em falha: ${failed.map((s) => s.context).join(', ')}` : '',
             pending.length ? `pendentes: ${pending.map((s) => s.context).join(', ')}` : '',
@@ -418,6 +460,45 @@ export function pullTools({ ctx }: PullToolsInput): ToolSpec[] {
         ctx.notify(`PR ${repo}#${n} merged (${style})`, 'success');
 
         const head = after.headRef ?? '';
+
+        // Se wait_ci, espera o run na branch de destino
+        if (args.wait_ci && after.baseRef) {
+          const baseBranch = after.baseRef;
+          let runId: number | undefined;
+          for (let i = 0; i < 10; i++) {
+            const runs = await ctx.host.listRuns(repo, { branch: baseBranch, limit: 1 });
+            if (runs.length) {
+              runId = runs[0].id;
+              break;
+            }
+            await new Promise((r) => setTimeout(r, 3000));
+          }
+          if (runId) {
+            const { run } = await (async () => {
+              const deadline = Date.now() + 900_000; // 15min
+              for (;;) {
+                const run = await ctx.host.getRun(repo, runId);
+                if (
+                  !['queued', 'in_progress', 'waiting', 'running', 'pending'].includes(run.status)
+                )
+                  return { run };
+                if (Date.now() >= deadline) return { run };
+                await new Promise((r) => setTimeout(r, 6000));
+              }
+            })();
+            return [
+              `PR ${repo}#${n} ${result} -> ${after.baseRef ?? ''}`,
+              `  ${after.htmlUrl ?? ''}`,
+              args.delete_branch && head ? `  branch ${head} removida` : '',
+              '',
+              `A branch ${after.baseRef ?? ''} recebeu o commit ${(pr.headSha ?? '').slice(0, 7)}. ` +
+                `CI da branch de destino: run #${run.id} - ${run.status}/${run.conclusion ?? '?'}.`,
+            ]
+              .filter(Boolean)
+              .join('\n');
+          }
+        }
+
         return [
           `PR ${repo}#${n} ${result} -> ${after.baseRef ?? ''}`,
           `  ${after.htmlUrl ?? ''}`,

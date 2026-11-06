@@ -20,6 +20,7 @@ export type SlopHit = {
   rule: string;
   match: string;
   context: string;
+  line: number;
 };
 
 export type ProseMode = 'off' | 'warn' | 'block';
@@ -129,6 +130,8 @@ function skillPatterns(): Pattern[] {
     const line = raw.trim();
     if (!line || line.startsWith('#')) continue;
     if (line === '—' || line === '[·•]' || line === '→|⇒') continue;
+    // Filtrar avisos que nao sao termos tecnicos uteis (ex.: not-opted-in)
+    if (line.includes('not-opted-in')) continue;
     const rx = line.replace(/\[\[:space:\]\]/g, '\\s');
     try {
       skillCache.push({ rule: 'skill unsloppify', rx: new RegExp(rx, 'gi'), sev: 'warn' });
@@ -137,6 +140,35 @@ function skillPatterns(): Pattern[] {
     }
   }
   return skillCache;
+}
+
+/** Termos permitidos por repo/env. Carregados uma vez. */
+let allowedCache: Set<string> | null = null;
+function allowedTerms(): Set<string> {
+  if (allowedCache) return allowedCache;
+  allowedCache = new Set();
+  const env = process.env.PYATILETKA_PROSE_ALLOW?.trim();
+  if (env) {
+    for (const t of env.split(',')) {
+      const trimmed = t.trim();
+      if (trimmed) allowedCache.add(trimmed.toLowerCase());
+    }
+  }
+  return allowedCache;
+}
+
+/** Verifica se o match parece um identificador tecnico (slug, camelCase, etc). */
+function looksLikeIdentifier(match: string): boolean {
+  const lower = match.toLowerCase();
+  // slug com hifen: frete-e-api, agro-e-api, mobile-messaging-api
+  if (/^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(lower)) return true;
+  // camelCase/PascalCase: FRETE-E-API, Gate, cutover, buildPushAction
+  if (/^[A-Z][a-zA-Z0-9]*([A-Z][a-zA-Z0-9]*)+$/.test(match)) return true;
+  // MAIUSCULO_COM_UNDERSCORE: X_FRAME_OPTIONS
+  if (/^[A-Z0-9]+(?:_[A-Z0-9]+)+$/.test(match)) return true;
+  // termos comuns de CI/CD/infra - estes sao avisos, nao erros
+  // (a lista canonica da skill ja os trata como aviso)
+  return false;
 }
 
 /** Remove code span, bloco, URL e trecho entre aspas: material citado. */
@@ -156,19 +188,35 @@ function contextOf(text: string, index: number) {
   return line.trim().slice(0, 160);
 }
 
+function lineNumber(text: string, index: number): number {
+  return text.slice(0, index).split('\n').length;
+}
+
 export function lintProse(text: string): SlopHit[] {
   if (!text?.trim()) return [];
   const scan = stripLiteral(text);
   const out: SlopHit[] = [];
+  const allowed = allowedTerms();
+
   for (const p of [...HOUSE, ...CORE, ...skillPatterns()]) {
     p.rx.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = p.rx.exec(scan)) !== null) {
+      const match = m[0];
+      const matchLower = match.toLowerCase();
+
+      // Ignorar se esta na lista de permitidos
+      if (allowed.has(matchLower)) continue;
+
+      // Ignorar se parece identificador tecnico (para avisos da skill)
+      if (p.sev === 'warn' && looksLikeIdentifier(match)) continue;
+
       out.push({
         severity: p.sev,
         rule: p.rule,
-        match: m[0],
+        match,
         context: contextOf(text, m.index),
+        line: lineNumber(text, m.index),
       });
       if (m.index === p.rx.lastIndex) p.rx.lastIndex++;
     }
@@ -180,13 +228,15 @@ export function lintProse(text: string): SlopHit[] {
   return out.filter((h) => h.severity === 'error' || !errored.has(h.match.toLowerCase()));
 }
 
-function formatWarns(warns: SlopHit[]): string[] {
+function formatHits(hits: SlopHit[], label: string): string[] {
   const uniq = new Map<string, SlopHit>();
-  for (const h of warns) uniq.set(h.match.toLowerCase(), h);
+  for (const h of hits) uniq.set(h.match.toLowerCase(), h);
   return [
     '',
-    `unsloppify: ${warns.length} aviso(s), confira se e o termo exato do caso, senao revise:`,
-    ...[...uniq.values()].map((h) => `  aviso "${h.match}" em: ${h.context}`),
+    `${label}: ${hits.length} ${label === 'erro' ? 'violacao(oes)' : 'aviso(s)'}${hits.length !== uniq.size ? ` (${uniq.size} unicos)` : ''}, confira se e o termo exato do caso, senao revise:`,
+    ...[...uniq.values()].map(
+      (h) => `  linha ${h.line}: "${h.match}" (${h.rule}) em: ${h.context}`
+    ),
   ];
 }
 
@@ -207,15 +257,43 @@ export function assertProse(
   if (errors.length && mode === 'block') {
     const lines = [
       `unsloppify recusou ${where}: ${errors.length} violacao(oes) mecanica(s)/de formula. O texto NAO foi gravado.`,
-      ...errors.map((h) => `  erro  ${h.rule}\n        "${h.match}" em: ${h.context}`),
+      ...formatHits(errors, 'erro'),
       '',
       'Reescreva e chame de novo. Regras em README (secao Checagem de prosa).',
       'Termo tecnico legitimo (smoke test, cutover, harness) nao bloqueia: vira aviso.',
+      'Adicione termos permitidos em PYATILETKA_PROSE_ALLOW (ex.: "frete-e-api,agro-e-api").',
     ];
-    if (warns.length) lines.push(...formatWarns(warns));
+    if (warns.length) lines.push(...formatHits(warns, 'aviso'));
     throw new Error(lines.join('\n'));
   }
 
   const all = mode === 'block' ? warns : hits;
-  return all.length ? formatWarns(all).join('\n') : '';
+  const label = errors.length && mode === 'warn' ? 'aviso' : errors.length ? 'erro' : 'aviso';
+  return all.length ? formatHits(all, label).join('\n') : '';
+}
+
+/**
+ * Modo fix: devolve o texto com trocas mecanicas para aprovacao, sem gravar.
+ * Substitui travessao por dois-pontos, ponto e virgula por ponto.
+ */
+export function fixProse(text: string): { fixed: string; changes: string[] } {
+  const changes: string[] = [];
+  let fixed = text
+    .replace(/—/g, (m) => {
+      changes.push(`travessao -> dois-pontos: "${m}"`);
+      return ':';
+    })
+    .replace(/;/g, (m) => {
+      changes.push(`ponto e virgula -> ponto: "${m}"`);
+      return '.';
+    })
+    .replace(/·/g, (m) => {
+      changes.push(`ponto medio -> virgula: "${m}"`);
+      return ',';
+    })
+    .replace(/•/g, (m) => {
+      changes.push(`bullet -> traco: "${m}"`);
+      return '-';
+    });
+  return { fixed, changes };
 }

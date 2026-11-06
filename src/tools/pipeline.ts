@@ -188,43 +188,85 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
 
     ci_wait: tool({
       description:
-        'BLOQUEIA ate a execucao chegar em estado terminal (completed/failure/cancelled) ou ate `timeout_ms`. Use depois de um push em vez de `sleep N && ...` em loop. Em falha, devolve as linhas de erro do log. Informe `run` ou `branch`: sem os dois, nao ha como saber qual execucao esperar.',
+        'BLOQUEIA ate a execucao chegar em estado terminal (completed/failure/cancelled) ou ate `timeout_ms`. Use depois de um push em vez de `sleep N && ...` em loop. Em falha, devolve as linhas de erro do log. Informe `run`, `branch`, ou `ref` (branch, numero de run ou sha). Grace period espera o run aparecer apos o push.',
       args: {
         repo: repoArgHere,
         run: tool.schema
           .string()
           .optional()
-          .describe(
-            'ID da execucao. Se omitido e `branch` vier, espera a mais recente dessa branch.'
-          ),
+          .describe('ID da execucao. Se omitido e `branch` ou `ref` vier, espera a mais recente.'),
         branch: tool.schema.string().optional().describe('Branch a aguardar.'),
+        ref: tool.schema
+          .string()
+          .optional()
+          .describe('Branch, numero de run ou sha para aguardar (unico argumento).'),
         timeout_ms: tool.schema
           .number()
           .optional()
           .describe(`Timeout em ms (default ${DEFAULT_TIMEOUT_MS}, ou seja 15min). Min 30s.`),
+        grace_ms: tool.schema
+          .number()
+          .optional()
+          .describe(
+            'Tempo em ms para esperar o run aparecer apos o push (default 60000, 0 para desabilitar).'
+          ),
         logs_on_failure: tool.schema
           .boolean()
           .optional()
           .describe('Anexar linhas de erro do log quando falhar (default true).'),
       },
       async execute(args) {
-        const repo = resolve(args.repo);
-        const timeoutMs = Math.max(30_000, args.timeout_ms ?? DEFAULT_TIMEOUT_MS);
-        const branch = await resolveBranch(repo, args.branch);
+        // Tratar string vazia como ausente
+        const runArg = args.run?.trim() || undefined;
+        const branchArg = args.branch?.trim() || undefined;
+        const refArg = args.ref?.trim() || undefined;
 
-        if (!args.run && !branch) {
+        if (!runArg && !branchArg && !refArg) {
           throw new Error(
-            `Informe \`run\` (id da execucao) ou \`branch\`. Sem os dois nao da para saber qual execucao esperar em ${repo}.`
+            `Informe \`run\` (id da execucao), \`branch\` ou \`ref\`. Sem os tres nao da para saber qual execucao esperar.`
           );
         }
 
-        let id = args.run ? parseRef(args.run) : NaN;
+        // Se ref parece um run id numerico ou sha, nao use como repo
+        const isRefNumeric = refArg && !isNaN(Number(refArg));
+        const isRefSha = refArg && /^[0-9a-f]{7,40}$/i.test(refArg);
+        const repo = resolve(isRefNumeric || isRefSha ? args.repo : (refArg ?? args.repo));
+        const timeoutMs = Math.max(30_000, args.timeout_ms ?? DEFAULT_TIMEOUT_MS);
+        const graceMs = args.grace_ms ?? 60_000;
+
+        // Resolve branch: ref -> branch -> defaultBranch
+        // Se ref e numerico/sha, nao use como branch
+        let branch = await resolveBranch(
+          repo,
+          isRefNumeric || isRefSha ? branchArg : (branchArg ?? refArg)
+        );
+
+        // Se ref e numerico, e um run id
+        let id = runArg ? parseRef(runArg) : isRefNumeric ? parseRef(refArg!) : NaN;
+
+        // Se nao tem run id, tenta achar o run mais recente
         if (!Number.isFinite(id)) {
-          const found = await latestRun(ctx, repo, branch);
+          // Grace period: espera o run aparecer
+          const deadline = Date.now() + graceMs;
+          let found: Run | undefined;
+          while (Date.now() < deadline) {
+            found = await latestRun(ctx, repo, branch);
+            if (found) break;
+            await sleep(2000);
+          }
           if (!found) {
-            throw new Error(
-              `Nenhuma execucao em ${repo} para a branch ${branch}. O workflow disparou?`
-            );
+            // Tenta buscar por sha se ref parece sha
+            if (refArg && /^[0-9a-f]{7,40}$/i.test(refArg)) {
+              const runs = await ctx.host.listRuns(repo, { limit: 20 });
+              found = runs.find((r) => r.sha?.startsWith(refArg));
+            }
+          }
+          if (!found) {
+            const partial: string[] = [
+              `Nenhuma execucao encontrada em ${repo}${branch ? ` para a branch ${branch}` : ''} apos ${Math.round(graceMs / 1000)}s.`,
+              '  O workflow disparou? Verifique se o push gerou o run.',
+            ];
+            return partial.join('\n');
           }
           id = found.id;
         }
@@ -238,13 +280,21 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
 
         const { run, timedOut } = await waitRun(ctx, repo, id, timeoutMs);
 
+        // Estado parcial sempre disponivel
+        const partial = [
+          `${repo} run #${run.id} - ${run.status}/${run.conclusion ?? '?'}`,
+          `  branch: ${branchOf(run)}  sha: ${(run.sha ?? '').slice(0, 7)}`,
+          `  url: ${run.url ?? ''}`,
+        ];
+
         if (timedOut) {
-          return [
-            `timeout apos ${Math.round(timeoutMs / 1000)}s - ${repo} run #${run.id} ainda em ${run.status}`,
-            `  branch: ${branchOf(run)}  sha: ${(run.sha ?? '').slice(0, 7)}`,
+          partial.push(
+            '',
+            `timeout apos ${Math.round(timeoutMs / 1000)}s - ainda em ${run.status}`,
             '  Isso nao e falha: o runner pode estar ocupado, offline, ou o job ainda em espera.',
-            `  Proximo passo: \`${refTool('ci_run')}\` para o estado e \`${refTool('ci_runners')}\` para o runner, ou \`${refTool('ci_wait')}\` de novo para estender.`,
-          ].join('\n');
+            `  Proximo passo: \`${refTool('ci_run')}\` para o estado e \`${refTool('ci_runners')}\` para o runner, ou \`${refTool('ci_wait')}\` de novo para estender.`
+          );
+          return partial.join('\n');
         }
 
         const ok = run.conclusion === 'success';
@@ -300,53 +350,6 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
       },
     }),
 
-    ci_config: tool({
-      description:
-        'Configuracao de CI de um repo: todas as variaveis e a lista de secrets (nunca os valores), mais os workflows disponiveis para dispatch. Uma chamada substitui N chamadas para ler variavel por variavel.',
-      args: { repo: repoArgHere },
-      async execute(args) {
-        const repo = resolve(args.repo);
-        const cfg = await ctx.host.getActionsConfig(repo);
-        const lines = [`${repo} - CI`];
-
-        lines.push(
-          cfg.variables.length
-            ? `\nvariables (${cfg.variables.length}):\n${cfg.variables
-                .map((v) => {
-                  const detail =
-                    (v.lines ?? 0) > 1 || (v.chars ?? 0) > 60
-                      ? ` [${v.lines ?? 1} linhas, ${v.chars ?? 0} chars]`
-                      : '';
-                  return `  ${v.name}=${(v.value ?? '').slice(0, 60)}${detail}`;
-                })
-                .sort()
-                .join('\n')}`
-            : '\nvariables: (nenhuma ou sem permissao)'
-        );
-
-        lines.push(
-          cfg.secrets.length
-            ? `\nsecrets (${cfg.secrets.length}, valores ocultos): ${[...cfg.secrets].sort().join(', ')}`
-            : '\nsecrets: (nenhum ou sem permissao)'
-        );
-
-        lines.push(
-          cfg.workflows.length
-            ? `\nworkflows:\n${cfg.workflows
-                .map(
-                  (w) =>
-                    `  ${w.id}${w.state && w.state !== 'active' ? ` [${w.state}]` : ''} - ${w.name}`
-                )
-                .join(
-                  '\n'
-                )}\n  (dispatch por id; \`${refTool('ci_dispatch')}\` aceita o id ou o nome do arquivo)`
-            : '\nworkflows: (nenhum ou sem permissao)'
-        );
-
-        return lines.join('\n');
-      },
-    }),
-
     ci_dispatch: tool({
       description: `Dispara um workflow manualmente. \`inputs\` sao pares chave/valor; confirme os nomes validos com \`${refTool('ci_config')}\` antes.`,
       args: {
@@ -376,19 +379,43 @@ export function pipelineTools({ ctx, defaultBranch = '' }: PipelineToolsInput): 
 
     ci_runners: tool({
       description:
-        'Runner(s) de CI do repo ou da org: online ou offline, busy e labels. Use quando um run fica queued sem comecar.',
+        'Runner(s) de CI do repo ou da org: online ou offline, busy e labels. Use quando um run fica queued sem comecar. Se o repo nao tem runner proprio, consulta a org e a instancia.',
       args: { repo: repoArgHere },
       async execute(args) {
         const repo = resolve(args.repo);
-        const runners = await ctx.host.listRunners(repo);
-        if (!runners.length) return `Nenhum runner registrado para ${repo}.`;
+        const [owner] = repo.split('/');
+
+        let runners = await ctx.host.listRepoRunners(repo);
+        let scope = 'repo';
+
+        if (!runners.length && owner) {
+          const orgRunners = await ctx.host.listOrgRunners(owner).catch(() => []);
+          if (orgRunners.length) {
+            runners = orgRunners;
+            scope = 'org';
+          } else {
+            const instanceRunners = await ctx.host.listInstanceRunners?.().catch(() => []);
+            if (instanceRunners && instanceRunners.length) {
+              runners = instanceRunners;
+              scope = 'instancia';
+            }
+          }
+        }
+
+        if (!runners.length) {
+          const orgMsg = owner ? ` (org ${owner} tambem sem runners)` : '';
+          return `Nenhum runner registrado para ${repo}${orgMsg}. Se o CI roda, o runner pode estar em escopo que o token nao acessa.`;
+        }
+
         return [
-          `${runners.length} runner(s):`,
-          ...runners.map((r) => {
-            const state = r.status !== 'online' ? '!' : r.busy ? '>' : '-';
-            const labels = r.labels?.join(', ') || '(sem label)';
-            return `  ${state} ${r.name.padEnd(12)} ${r.status.padEnd(8)} busy=${String(r.busy).padEnd(5)} labels: ${labels}`;
-          }),
+          `${runners.length} runner(s) (escopo: ${scope}):`,
+          ...runners.map(
+            (r: { name: string; status: string; busy: boolean; labels?: string[] }) => {
+              const state = r.status !== 'online' ? '!' : r.busy ? '>' : '-';
+              const labels = r.labels?.join(', ') || '(sem label)';
+              return `  ${state} ${r.name.padEnd(12)} ${r.status.padEnd(8)} busy=${String(r.busy).padEnd(5)} labels: ${labels}`;
+            }
+          ),
         ].join('\n');
       },
     }),

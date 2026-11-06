@@ -231,24 +231,17 @@ describe('branch_compare com ref inexistente', () => {
 });
 
 describe('branch_promote', () => {
-  it('branch fora da ordem e recusada', async () => {
-    expect(await runFail('branch_promote', { from: 'main' })).toContain('PYATILETKA_PROMOTE_ORDER');
+  it('branch nao configurada mas existente: infere ordem alfabetica', async () => {
+    // 'main' nao esta na ordem padrao (staging -> production) mas existe no repo
+    // Deve inferir ordem alfabetica: main, production, staging
+    const out = await run('branch_promote', { from: 'main', repo: REPO, dry_run: true });
+    expect(out).toContain('promocao main -> [production, staging]');
   });
 
-  it('branch fora da ordem e recusada antes de procurar o repo', async () => {
-    const semRepo: Ctx = {
-      host: host,
-      config: makeConfig({ org: undefined }),
-      notify: () => {},
-    };
-    const t = toV1Tools(branchTools({ ctx: semRepo, directory: '/nao-existe' }));
-    try {
-      await t.branch_promote.execute({ from: 'nao-existe' }, toolCtx);
-      throw new Error('nao lancou');
-    } catch (e) {
-      // A mensagem tem de ser da branch, nao do repo ausente.
-      expect((e as Error).message).toContain('nao esta na ordem de promocao');
-    }
+  it('branch inexistente e recusada', async () => {
+    expect(await runFail('branch_promote', { from: 'nao-existe', repo: REPO })).toContain(
+      'nao existe'
+    );
   });
 
   it('ultima da ordem nao tem para onde subir', async () => {

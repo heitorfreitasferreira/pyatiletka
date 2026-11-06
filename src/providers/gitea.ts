@@ -2,6 +2,9 @@ import { spawn } from 'node:child_process';
 import type { Config } from '../config';
 import { shapeLog } from '../core/logs';
 import { GitHostError, Http } from './http';
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 import type {
   CreateIssueInput,
   IssueAsset,
@@ -282,6 +285,40 @@ export class GiteaHost implements GitHost {
     return { defaultBranch: r.default_branch ?? undefined };
   }
 
+  async getRepoFile(
+    repo: string,
+    path: string,
+    ref?: string
+  ): Promise<{
+    content: string;
+    encoding: 'base64' | 'text';
+    size: number;
+    type: 'file' | 'dir';
+    name: string;
+  }> {
+    const q = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+    const data = await this.http.request<{
+      content?: string;
+      encoding?: string;
+      size?: number;
+      type?: string;
+      name?: string;
+      path?: string;
+    }>(`/repos/${repo}/contents/${encodeURIComponent(path)}${q}`, { pageParam: 'limit' });
+    if (data.type === 'dir') {
+      throw new Error(
+        `"${path}" e um diretorio. Use a API de lista de arquivos para ver o conteudo.`
+      );
+    }
+    return {
+      content: data.content ?? '',
+      encoding: (data.encoding as 'base64' | 'text') ?? 'base64',
+      size: data.size ?? 0,
+      type: 'file',
+      name: data.name ?? path.split('/').pop() ?? path,
+    };
+  }
+
   // -- issues ---------------------------------------------------------------
 
   async getIssue(repo: string, n: number): Promise<Issue> {
@@ -314,6 +351,8 @@ export class GiteaHost implements GitHost {
     if (patch.body !== undefined) body.body = patch.body;
     if (patch.state !== undefined) body.state = patch.state;
     if (patch.stateReason !== undefined) body.state_reason = patch.stateReason;
+    if (patch.milestone !== undefined)
+      body.milestone = patch.milestone === null ? undefined : Number(patch.milestone);
     if (Object.keys(body).length) {
       await this.http.request(issuePath(repo, n), { pageParam: 'limit', method: 'PATCH', body });
     }
@@ -343,8 +382,43 @@ export class GiteaHost implements GitHost {
       if (id === undefined) missing.push(name);
       else ids.push(id);
     }
-    if (missing.length) throw new Error(`labels inexistentes em ${repo}: ${missing.join(', ')}`);
+    if (missing.length) {
+      const suggestions = missing.map((m) => {
+        // Sugerir label mais proximo por familia
+        const family = m.split('/')[0];
+        const sameFamily = all.filter((l) => l.name.startsWith(family + '/'));
+        if (sameFamily.length) {
+          const closest = sameFamily.sort(
+            (a, b) => this.levenshtein(m, a.name) - this.levenshtein(m, b.name)
+          )[0];
+          return `${m} (voce quis dizer ${closest.name}?)`;
+        }
+        if (m.toLowerCase().includes('done') || m.toLowerCase().includes('closed')) {
+          return `${m} (use \`issue_close\` para fechar, nao label de Status)`;
+        }
+        return m;
+      });
+      throw new Error(
+        `labels inexistentes em ${repo}: ${suggestions.join(', ')}. Labels validos: ${all.map((l) => l.name).join(', ')}`
+      );
+    }
     return ids;
+  }
+
+  private levenshtein(a: string, b: string): number {
+    const dp: number[][] = Array.from({ length: a.length + 1 }, () =>
+      Array.from({ length: b.length + 1 }, (_, j) => j)
+    );
+    for (let i = 1; i <= a.length; i++) dp[i][0] = i;
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        dp[i][j] =
+          a[i - 1] === b[j - 1]
+            ? dp[i - 1][j - 1]
+            : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+    return dp[a.length][b.length];
   }
 
   // -- comentarios ----------------------------------------------------------
@@ -397,6 +471,15 @@ export class GiteaHost implements GitHost {
       cap: 100,
     });
     return out.map((i) => this.mapIssue(i));
+  }
+
+  async listLabels(repo: string): Promise<string[]> {
+    const all = await this.http.requestAll<{ name: string }>(`/repos/${repo}/labels`, {
+      pageParam: 'limit',
+      cap: 500,
+      perPage: 100,
+    });
+    return all.map((l) => l.name);
   }
 
   async addDependencies(repo: string, n: number, blockers: number[]): Promise<void> {
@@ -637,12 +720,55 @@ export class GiteaHost implements GitHost {
           : style === 'rebase'
             ? 'rebase'
             : 'fast-forward-only';
-    await this.http.request(`${pullPath(repo, n)}/merge`, {
-      pageParam: 'limit',
-      method: 'POST',
-      body: { Do, delete_branch_after_merge: opts.deleteBranch ?? false },
-    });
-    return `merged (${style})`;
+
+    // Retry em 405 (mergeability ainda calculando) e 500 DivergingFastForwardOnly
+    // com backoff curto, ate ~30s.
+    const maxRetries = 6;
+    const baseDelay = 5000;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        await this.http.request(`${pullPath(repo, n)}/merge`, {
+          pageParam: 'limit',
+          method: 'POST',
+          body: { Do, delete_branch_after_merge: opts.deleteBranch ?? false },
+        });
+        return `merged (${style})`;
+      } catch (e) {
+        const err = e as { status?: number; response?: { message?: string } };
+
+        // 422: valor de Do invalido (ja tratado acima no catch do ff-only)
+        if (err.status === 422 && err.response?.message?.includes('[Do]: In')) {
+          throw new Error(
+            `Gitea recusou o estilo de merge "${style}" (enviado Do: ${Do}). A API espera "fast-forward-only" (o valor padrao) ou um dos: merge, rebase, rebase-merge, squash, manually-merged.`
+          );
+        }
+
+        // 405: Gitea ainda calculando mergeabilidade logo apos push/abertura do PR
+        if (err.status === 405 && attempt < maxRetries) {
+          await sleep(baseDelay * (attempt + 1));
+          continue;
+        }
+
+        // 500 DivergingFastForwardOnly: base avancou, precisa rebase
+        if (err.status === 500 && err.response?.message?.includes('DivergingFastForwardOnly')) {
+          throw new Error(
+            `A branch de destino avancou e o Gitea nao faz fast-forward (DivergingFastForwardOnly). ` +
+              `Faca rebase da branch de origem sobre o destino e rode de novo.`
+          );
+        }
+
+        // 500 genérico: retry uma vez se for erro de servidor
+        if (err.status === 500 && attempt < 1) {
+          await sleep(baseDelay);
+          continue;
+        }
+
+        throw e;
+      }
+    }
+
+    throw new Error(`Timeout: Gitea nao calculou a mergeabilidade apos ${maxRetries} tentativas.`);
   }
 
   // -- pipeline -------------------------------------------------------------
@@ -711,6 +837,63 @@ export class GiteaHost implements GitHost {
     };
   }
 
+  async upsertActionsVariable(repo: string, name: string, value: string): Promise<void> {
+    await this.http
+      .request(`/repos/${repo}/actions/variables`, {
+        pageParam: 'limit',
+        method: 'POST',
+        body: { name, data: value },
+      })
+      .catch(async (e: unknown) => {
+        const err = e as { status?: number };
+        if (err.status === 409 || err.status === 422) {
+          // Ja existe, tenta PUT
+          await this.http.request(`/repos/${repo}/actions/variables/${encodeURIComponent(name)}`, {
+            pageParam: 'limit',
+            method: 'PATCH',
+            body: { data: value },
+          });
+        } else {
+          throw e;
+        }
+      });
+  }
+
+  async deleteActionsVariable(repo: string, name: string): Promise<void> {
+    await this.http.request(`/repos/${repo}/actions/variables/${encodeURIComponent(name)}`, {
+      pageParam: 'limit',
+      method: 'DELETE',
+    });
+  }
+
+  async upsertActionsSecret(repo: string, name: string, value: string): Promise<void> {
+    await this.http
+      .request(`/repos/${repo}/actions/secrets`, {
+        pageParam: 'limit',
+        method: 'POST',
+        body: { name, data: value },
+      })
+      .catch(async (e: unknown) => {
+        const err = e as { status?: number };
+        if (err.status === 409 || err.status === 422) {
+          await this.http.request(`/repos/${repo}/actions/secrets/${encodeURIComponent(name)}`, {
+            pageParam: 'limit',
+            method: 'PATCH',
+            body: { data: value },
+          });
+        } else {
+          throw e;
+        }
+      });
+  }
+
+  async deleteActionsSecret(repo: string, name: string): Promise<void> {
+    await this.http.request(`/repos/${repo}/actions/secrets/${encodeURIComponent(name)}`, {
+      pageParam: 'limit',
+      method: 'DELETE',
+    });
+  }
+
   async dispatchWorkflow(
     repo: string,
     workflow: string,
@@ -732,7 +915,7 @@ export class GiteaHost implements GitHost {
    * casos e ainda e o mais preciso: sao os runners que poderiam pegar o job
    * daquele repo.
    */
-  async listRunners(repo: string): Promise<Runner[]> {
+  async listRepoRunners(repo: string): Promise<Runner[]> {
     const data = await this.http.request<{
       runners?: {
         id: number;
@@ -742,6 +925,48 @@ export class GiteaHost implements GitHost {
         labels?: { name: string }[];
       }[];
     }>(`/repos/${repo}/actions/runners`, { pageParam: 'limit' });
+    return (data?.runners ?? []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      status: r.status,
+      busy: r.busy,
+      labels: r.labels?.map((l) => l.name),
+    }));
+  }
+
+  async listOrgRunners(org: string): Promise<Runner[]> {
+    const data = await this.http
+      .request<{
+        runners?: {
+          id: number;
+          name: string;
+          status: string;
+          busy: boolean;
+          labels?: { name: string }[];
+        }[];
+      }>(`/orgs/${org}/actions/runners`, { pageParam: 'limit' })
+      .catch(() => ({ runners: [] }));
+    return (data?.runners ?? []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      status: r.status,
+      busy: r.busy,
+      labels: r.labels?.map((l) => l.name),
+    }));
+  }
+
+  async listInstanceRunners(): Promise<Runner[]> {
+    const data = await this.http
+      .request<{
+        runners?: {
+          id: number;
+          name: string;
+          status: string;
+          busy: boolean;
+          labels?: { name: string }[];
+        }[];
+      }>(`/admin/actions/runners`, { pageParam: 'limit' })
+      .catch(() => ({ runners: [] }));
     return (data?.runners ?? []).map((r) => ({
       id: r.id,
       name: r.name,

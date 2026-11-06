@@ -148,14 +148,32 @@ export function branchTools({
 
     branch_compare: tool({
       description:
-        'Compara duas branches direto da API: se uma e ancestral da outra, quantos commits cada uma tem a frente, e se ja ha PR aberto entre elas. Nao usa git local, entao funciona sem clone.',
+        'Compara duas branches direto da API: se uma e ancestral da outra, quantos commits cada uma tem a frente, e se ja ha PR aberto entre elas. Nao usa git local, entao funciona sem clone. Sem `head`, usa a branch atual do clone.',
       args: {
         repo: repoArgHere,
         base: tool.schema.string().describe('Branch de destino.'),
-        head: tool.schema.string().describe('Branch de origem.'),
+        head: tool.schema
+          .string()
+          .optional()
+          .describe('Branch de origem. Default: branch atual do clone.'),
       },
       async execute(args) {
         const repo = resolve(args.repo);
+
+        // Se head nao veio, tenta achar a branch atual do clone
+        let head = args.head;
+        if (!head) {
+          const clone = findClone(directory, repo);
+          if (clone) {
+            const r = await git(clone, ['branch', '--show-current']);
+            if (r.code === 0 && r.out.trim()) head = r.out.trim();
+          }
+          if (!head)
+            throw new Error(
+              '`head` nao informado e nao deu para deduzir a branch atual (sem clone).'
+            );
+        }
+
         // O compare 404 quando qualquer uma das refs nao existe, e a API nao
         // diz qual. Listar antes transforma um 404 opaco em "esta branch nao
         // existe" e ainda oferece a lista do que existe.
@@ -164,7 +182,7 @@ export function branchTools({
         );
         for (const [papel, nome] of [
           ['base', args.base],
-          ['head', args.head],
+          ['head', head],
         ] as const) {
           if (existentes.size && !existentes.has(nome)) {
             throw new Error(
@@ -173,16 +191,16 @@ export function branchTools({
           }
         }
 
-        const cmp = await ctx.host.compare(repo, args.base, args.head);
+        const cmp = await ctx.host.compare(repo, args.base, head);
         const prs = await ctx.host
-          .listPulls(repo, { state: 'open', head: args.head, limit: 50 })
+          .listPulls(repo, { state: 'open', head, limit: 50 })
           .catch(() => []);
-        const matching = prs.filter((p) => p.headRef === args.head && p.baseRef === args.base);
+        const matching = prs.filter((p) => p.headRef === head && p.baseRef === args.base);
 
         const lines = [
-          `${repo}: ${args.head} -> ${args.base}`,
-          `  status:       ${compareVerdict(args.base, args.head, cmp)}`,
-          `  ${args.head} a frente: ${cmp.ahead}   ${args.base} a frente: ${cmp.behind}`,
+          `${repo}: ${head} -> ${args.base}`,
+          `  status:       ${compareVerdict(args.base, head, cmp)}`,
+          `  ${head} a frente: ${cmp.ahead}   ${args.base} a frente: ${cmp.behind}`,
         ];
 
         if (cmp.commits.length) {
@@ -203,14 +221,14 @@ export function branchTools({
               ? 'Nada a fazer.'
               : cmp.behind === 0
                 ? `Sem conflito: \`${refTool('branch_promote')}\` propaga direto. Para revisar por PR, use \`${refTool('pr_create')}\`.`
-                : `Ha commits em ${args.base} que nao estao em ${args.head}: resolva localmente e mande por PR. Nao promova direto.`
+                : `Ha commits em ${args.base} que nao estao em ${head}: resolva localmente e mande por PR. Nao promova direto.`
         );
         return lines.join('\n');
       },
     }),
 
     branch_promote: tool({
-      description: `Promove uma branch para as branches que vem depois dela na ordem ${promoteOrder.join(' -> ')}. Faz push direto, sem force. Antes de cada push mostra o que sera propagado e \`dry_run: true\` so relata. Nao abre PR: se o servidor exigir revisao, use \`pr_create\`.`,
+      description: `Promove uma branch para as branches que vem depois dela na ordem configurada. Faz push direto, sem force. Antes de cada push mostra o que sera propagado e \`dry_run: true\` so relata. Nao abre PR: se o servidor exigir revisao, use \`pr_create\`. Quando so existe a branch padrao, diz que nao ha o que promover.`,
       args: {
         repo: repoArgHere,
         from: tool.schema.string().describe('Branch de origem.'),
@@ -218,44 +236,71 @@ export function branchTools({
           .array(tool.schema.string())
           .optional()
           .describe(
-            `Destinos. Default: tudo que vem depois de \`from\` em ${promoteOrder.join(' -> ')}.`
+            `Destinos. Default: tudo que vem depois de \`from\` na ordem de promocao (padrao: ${FALLBACK_ORDER.join(' -> ')}, override por PYATILETKA_PROMOTE_ORDER).`
           ),
         dry_run: tool.schema.boolean().optional().describe('So relata, nao faz push.'),
       },
       async execute(args) {
-        // A ordem e a checagem mais especifica e mais barata: resolver o repo
-        // primeiro esconderia o erro da branch quando o repo tambem nao esta
-        // configurado.
-        const order = promoteOrder;
-        const fromIdx = order.indexOf(args.from);
-        if (fromIdx === -1) {
-          throw new Error(
-            `branch "${args.from}" nao esta na ordem de promocao (${order.join(' -> ')}). Ajuste PYATILETKA_PROMOTE_ORDER se for outra.`
-          );
-        }
         const repo = resolve(args.repo);
 
-        const targets = args.to?.length ? args.to : order.slice(fromIdx + 1);
-        if (!targets.length) return `${args.from} ja e a ultima branch da ordem; nada a promover.`;
+        // Lista branches existentes para inferir ordem se so houver uma branch
+        const existentes = new Set(
+          (await ctx.host.listBranches(repo).catch(() => [])).map((b) => b.name)
+        );
 
-        for (const t of targets) {
-          if (order.indexOf(t) <= fromIdx) {
-            throw new Error(
-              `promocao invalida ${args.from} -> ${t}: a ordem e ${order.join(' -> ')}. ` +
-                'Nunca promova para tras com push direto; use PR.'
-            );
+        if (existentes.size === 0) {
+          return `${repo}: nenhuma branch encontrada.`;
+        }
+        if (existentes.size === 1) {
+          const only = [...existentes][0];
+          if (args.from === only) {
+            return `${repo}: so existe a branch "${only}". Nao ha para onde promover.`;
           }
+        }
+
+        // Se a branch de origem nao existe, erro claro
+        if (!existentes.has(args.from)) {
+          throw new Error(
+            `branch de origem "${args.from}" nao existe em ${repo}. Disponiveis: ${[...existentes].join(', ')}`
+          );
+        }
+
+        // Determina a ordem de promocao: se o from esta na ordem configurada, usa ela.
+        // Se nao, tenta inferir das branches existentes (ordem alfabetica como fallback).
+        const order = promoteOrder;
+        const fromIdx = order.indexOf(args.from);
+        let targets: string[];
+
+        if (fromIdx !== -1) {
+          // Ordem configurada existe
+          targets = args.to?.length ? args.to : order.slice(fromIdx + 1);
+          if (!targets.length)
+            return `${args.from} ja e a ultima branch da ordem; nada a promover.`;
+
+          for (const t of targets) {
+            if (order.indexOf(t) <= fromIdx) {
+              throw new Error(
+                `promocao invalida ${args.from} -> ${t}: a ordem e ${order.join(' -> ')}. ` +
+                  'Nunca promova para tras com push direto; use PR.'
+              );
+            }
+          }
+        } else {
+          // Ordem nao configurada: inferir das branches existentes
+          const sorted = [...existentes].sort();
+          const inferredFromIdx = sorted.indexOf(args.from);
+          if (inferredFromIdx === -1) {
+            // Ja verificado acima que a branch existe, mas por seguranca
+            throw new Error(`branch "${args.from}" nao encontrada nas branches existentes.`);
+          }
+          const inferredOrder = sorted;
+          targets = args.to?.length ? args.to : inferredOrder.slice(inferredFromIdx + 1);
+          if (!targets.length)
+            return `${args.from} ja e a ultima branch conhecida; nada a promover.`;
         }
 
         const report: string[] = [];
         const pushed: string[] = [];
-
-        // O compare 404 quando a ref base nao existe, e a mensagem da API nao
-        // diz qual dos dois lados sumiu. Saber quais branches existem separa
-        // "destino novo" de "origem apagada", que nao tem o mesmo conserto.
-        const existentes = new Set(
-          (await ctx.host.listBranches(repo).catch(() => [])).map((b) => b.name)
-        );
 
         /** Fetch e push de `from` para `to`. `ahead` e null quando e criacao. */
         const doPush = async (to: string, ahead: number | null): Promise<void> => {
@@ -288,10 +333,6 @@ export function branchTools({
         };
 
         for (const to of targets) {
-          if (!existentes.has(args.from)) {
-            throw new Error(`branch de origem "${args.from}" nao existe em ${repo}.`);
-          }
-
           // Destino novo nao tem compare: e o proprio push que cria a branch.
           if (!existentes.has(to)) {
             if (args.dry_run) {

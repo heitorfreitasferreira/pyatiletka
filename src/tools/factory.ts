@@ -5,6 +5,7 @@ import { branchTools } from './branches';
 import { issueTools } from './issues';
 import { pipelineTools } from './pipeline';
 import { pullTools } from './pulls';
+import { repoTools } from './repo';
 import type { ToolSpec } from './spec';
 
 /**
@@ -26,5 +27,6 @@ export function createToolSpecs({ ctx, directory, binding }: ToolSpecsInput): To
     ...pullTools({ ctx }),
     ...pipelineTools({ ctx, defaultBranch: ctx.config.defaultBranch ?? '' }),
     ...branchTools({ ctx, directory, promoteOrder: ctx.config.promoteOrder }),
+    ...repoTools({ ctx }),
   ];
 }
