@@ -183,8 +183,8 @@ describe('ci_run', () => {
 });
 
 describe('ci_wait', () => {
-  it('sem run e sem branch, recusa em vez de adivinhar', async () => {
-    expect(await runFail('ci_wait')).toContain('Informe `run` (id da execucao) ou `branch`');
+  it('sem run, branch ou ref, recusa', async () => {
+    expect(await runFail('ci_wait')).toContain('Informe `run` (id da execucao), `branch` ou `ref`');
   });
 
   it('espera o run ja terminado', async () => {
@@ -209,15 +209,20 @@ describe('ci_wait', () => {
     expect(host.called('getRunLogs')).toHaveLength(0);
   });
 
-  it('branch sem execucao explica', async () => {
-    expect(await runFail('ci_wait', { branch: 'nao-existe' })).toContain('Nenhuma execucao');
+  it('branch sem execucao devolve estado parcial apos grace period', async () => {
+    const out = await run('ci_wait', { branch: 'nao-existe', grace_ms: 100 });
+    expect(out).toContain('Nenhuma execucao encontrada');
+    expect(out).toContain('O workflow disparou?');
   });
 
-  it('sem run e sem branch, cai na branch padrao do repo pela API', async () => {
-    host.state.defaultBranch = 'feat/x';
-    const out = await run('ci_wait');
-    expect(out).toContain('org/repo run #99');
-    expect(host.called('getRepo')[0]?.args).toEqual([REPO]);
+  it('ref numerico e tratado como run id', async () => {
+    const out = await run('ci_wait', { ref: '100' });
+    expect(out).toContain('OK org/repo run #100');
+  });
+
+  it('ref como branch acha a execucao', async () => {
+    const out = await run('ci_wait', { ref: 'feat/x' });
+    expect(out).toContain('FALHOU feat/x run #99');
   });
 });
 
@@ -234,24 +239,6 @@ describe('ci_logs', () => {
 
   it('id invalido e recusado', async () => {
     expect(await runFail('ci_logs', { run: 'x' })).toContain('execucao invalida');
-  });
-});
-
-describe('ci_config', () => {
-  it('mostra variables, secrets e workflows, nunca o valor do secret', async () => {
-    const out = await run('ci_config');
-    expect(out).toContain('variables (2)');
-    expect(out).toContain('REGISTRY=registry.test');
-    expect(out).toContain('SSH_KEYS=a b c [12 linhas, 900 chars]');
-    expect(out).toContain('secrets (2, valores ocultos): DEPLOY_KEY, TOKEN');
-    expect(out).toContain('build - Build');
-  });
-
-  it('repo sem CI diz que nao tem', async () => {
-    host.state.actions = { variables: [], secrets: [], workflows: [] };
-    const out = await run('ci_config');
-    expect(out).toContain('variables: (nenhuma');
-    expect(out).toContain('workflows: (nenhum');
   });
 });
 

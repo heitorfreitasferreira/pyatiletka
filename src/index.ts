@@ -67,6 +67,9 @@ export const TOOL_NAMES = [
   'branch_compare',
   'branch_promote',
   'commit_list',
+  // repo
+  'repo_file',
+  'repo_list',
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -158,7 +161,7 @@ export { classify, fmtComment, fmtIssue, priorityOf } from './core/format';
 export { buildBody, listTemplates, loadTemplate, splitFrontmatter } from './core/template';
 export { findMilestone, inMilestone, milestoneQueue } from './core/milestone';
 export { ConfigError, loadConfig, resolveProvider, DEFAULT_PROMOTE_ORDER } from './config';
-export { assertProse, lintProse, type ProseMode, type SlopHit } from './prose';
+export { assertProse, lintProse, fixProse, type ProseMode, type SlopHit } from './prose';
 export { parseRemote, resolveRepo, type ResolvedRepo } from './repo';
 export { createGitHost } from './providers';
 export { createToolSpecs, type ToolSpecsInput } from './tools/factory';

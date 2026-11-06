@@ -41,9 +41,9 @@ function bindWorkspace(): string {
 }
 
 describe('createHandler', () => {
-  it('monta as 39 tools com o prefixo do plugin', () => {
+  it('monta as 41 tools com o prefixo do plugin', () => {
     const { handler, ctx } = createHandler({ directory: dir, env: env() });
-    expect(handler.specs).toHaveLength(39);
+    expect(handler.specs).toHaveLength(41);
     expect(ctx.toolPrefix).toBe('mcp__plugin_pyatiletka_pyatiletka__');
     expect(ctx.stateDir).toBe(stateDir);
   });

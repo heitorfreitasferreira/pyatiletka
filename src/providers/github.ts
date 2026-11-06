@@ -233,6 +233,40 @@ export class GitHubHost implements GitHost {
     return { defaultBranch: r.default_branch ?? undefined };
   }
 
+  async getRepoFile(
+    repo: string,
+    path: string,
+    ref?: string
+  ): Promise<{
+    content: string;
+    encoding: 'base64' | 'text';
+    size: number;
+    type: 'file' | 'dir';
+    name: string;
+  }> {
+    const q = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+    const data = await this.req<{
+      content?: string;
+      encoding?: string;
+      size?: number;
+      type?: string;
+      name?: string;
+      path?: string;
+    }>(`/repos/${repo}/contents/${encodeURIComponent(path)}${q}`);
+    if (data.type === 'dir') {
+      throw new Error(
+        `"${path}" e um diretorio. Use a API de lista de arquivos para ver o conteudo.`
+      );
+    }
+    return {
+      content: data.content ?? '',
+      encoding: (data.encoding as 'base64' | 'text') ?? 'base64',
+      size: data.size ?? 0,
+      type: 'file',
+      name: data.name ?? path.split('/').pop() ?? path,
+    };
+  }
+
   // -- issues ---------------------------------------------------------------
 
   async getIssue(repo: string, n: number): Promise<Issue> {
@@ -262,6 +296,8 @@ export class GitHubHost implements GitHost {
     if (patch.body !== undefined) body.body = patch.body;
     if (patch.state !== undefined) body.state = patch.state;
     if (patch.stateReason !== undefined) body.state_reason = patch.stateReason;
+    if (patch.milestone !== undefined)
+      body.milestone = patch.milestone === null ? undefined : Number(patch.milestone);
     if (Object.keys(body).length) await this.req(issuePath(repo, n), 'PATCH', body);
     if (patch.labels) {
       await this.req(`${issuePath(repo, n)}/labels`, 'PUT', { labels: patch.labels });
@@ -308,6 +344,14 @@ export class GitHubHost implements GitHost {
       }
     );
     return out.map((i) => this.mapIssue(i));
+  }
+
+  async listLabels(repo: string): Promise<string[]> {
+    const out = await this.http.requestAll<{ name: string }>(`/repos/${repo}/labels`, {
+      pageParam: 'per_page',
+      cap: 500,
+    });
+    return out.map((l) => l.name);
   }
 
   async addDependencies(repo: string, n: number, blockers: number[]): Promise<void> {
@@ -647,6 +691,44 @@ export class GitHubHost implements GitHost {
     };
   }
 
+  async upsertActionsVariable(repo: string, name: string, value: string): Promise<void> {
+    try {
+      await this.req(`/repos/${repo}/actions/variables`, 'POST', { name, value });
+    } catch (e) {
+      const err = e as { status?: number };
+      if (err.status === 409 || err.status === 422) {
+        await this.req(`/repos/${repo}/actions/variables/${encodeURIComponent(name)}`, 'PATCH', {
+          value,
+        });
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  async deleteActionsVariable(repo: string, name: string): Promise<void> {
+    await this.req(`/repos/${repo}/actions/variables/${encodeURIComponent(name)}`, 'DELETE');
+  }
+
+  async upsertActionsSecret(repo: string, name: string, value: string): Promise<void> {
+    try {
+      await this.req(`/repos/${repo}/actions/secrets`, 'POST', { name, encrypted_value: value });
+    } catch (e) {
+      const err = e as { status?: number };
+      if (err.status === 409 || err.status === 422) {
+        await this.req(`/repos/${repo}/actions/secrets/${encodeURIComponent(name)}`, 'PUT', {
+          encrypted_value: value,
+        });
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  async deleteActionsSecret(repo: string, name: string): Promise<void> {
+    await this.req(`/repos/${repo}/actions/secrets/${encodeURIComponent(name)}`, 'DELETE');
+  }
+
   async dispatchWorkflow(
     repo: string,
     workflow: string,
@@ -663,7 +745,7 @@ export class GitHubHost implements GitHost {
     );
   }
 
-  async listRunners(repo: string): Promise<Runner[]> {
+  async listRepoRunners(repo: string): Promise<Runner[]> {
     const data = await this.req<{
       runners?: {
         id: number;
@@ -680,6 +762,30 @@ export class GitHubHost implements GitHost {
       busy: r.busy,
       labels: r.labels?.map((l) => l.name),
     }));
+  }
+
+  async listOrgRunners(org: string): Promise<Runner[]> {
+    const data = await this.req<{
+      runners?: {
+        id: number;
+        name: string;
+        status: string;
+        busy: boolean;
+        labels?: { name: string }[];
+      }[];
+    }>(`/orgs/${org}/actions/runners`).catch(() => ({ runners: [] }));
+    return (data?.runners ?? []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      status: r.status,
+      busy: r.busy,
+      labels: r.labels?.map((l) => l.name),
+    }));
+  }
+
+  // GitHub nao tem endpoint de instance runners publico sem admin
+  async listInstanceRunners(): Promise<Runner[]> {
+    return [];
   }
 
   // -- branches -------------------------------------------------------------

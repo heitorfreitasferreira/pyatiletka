@@ -126,11 +126,18 @@ describe('issue_binding', () => {
     expect(await run('issue_binding')).toBe('Nenhuma issue vinculada nesta sessao.');
   });
 
-  it('com vinculo, mostra repo, issue e marco', async () => {
+  it('com vinculo, mostra repo, issue e marco (formato curto)', async () => {
     await run('issue_bind', { issue: '1', milestone: 'Entrega' });
     const out = await run('issue_binding');
     expect(out).toContain(`repo=${REPO} issue=1 marco=Entrega`);
-    expect(out).toContain('#1 [open] Corrigir fila');
+    expect(out).toContain('#1 [todo] Corrigir fila');
+  });
+
+  it('com full: true mostra corpo completo', async () => {
+    await run('issue_bind', { issue: '1', milestone: 'Entrega' });
+    const out = await run('issue_binding', { full: true });
+    expect(out).toContain('Corrigir fila');
+    expect(out).toContain('status: todo');
   });
 });
 
@@ -151,9 +158,14 @@ describe('issue_view', () => {
     expect(await run('issue_view', { issue: '1' })).toContain('depende de: nada');
   });
 
-  it('traz os comentarios', async () => {
+  it('default traz ultimos 3 comentarios', async () => {
     const out = await run('issue_view', { issue: '1' });
     expect(out).toContain('--- comentarios (2) ---');
+    expect(out).toContain('segundo');
+  });
+
+  it('comments: "all" traz todos', async () => {
+    const out = await run('issue_view', { issue: '1', comments: 'all' });
     expect(out).toContain('primeiro');
     expect(out).toContain('segundo');
   });
@@ -171,6 +183,12 @@ describe('issue_view', () => {
   it('avisa quando a API devolve menos comentarios que o contador', async () => {
     host.state.issues[0].comments = 10;
     expect(await run('issue_view', { issue: '1' })).toContain('pode haver corte no servidor');
+  });
+
+  it('brief: true so cabecalho', async () => {
+    const out = await run('issue_view', { issue: '1', brief: true });
+    expect(out).not.toContain('--- corpo ---');
+    expect(out).not.toContain('--- comentarios');
   });
 
   it('usa a issue vinculada quando nenhum numero vem', async () => {
@@ -319,7 +337,7 @@ describe('issue_create', () => {
   it('prosa em warn devolve o aviso e grava', async () => {
     tools = toV1Tools(issueTools({ ctx: ctxFor(host, 'warn'), directory: dir })) as never;
     const out = await run('issue_create', { title: 'x', body: 'faz o servidor — rapido' });
-    expect(out).toContain('unsloppify');
+    expect(out).toContain('aviso');
     expect(host.called('createIssue')).toHaveLength(1);
   });
 });
@@ -494,8 +512,14 @@ describe('milestone_view', () => {
 });
 
 describe('milestone_list e escrita', () => {
-  it('lista com contagem e progresso', async () => {
+  it('default lista so nomes', async () => {
     const out = await run('milestone_list');
+    expect(out).toContain('#13 [open] Entrega');
+    expect(out).not.toContain('1/3');
+  });
+
+  it('full: true traz contagem e progresso', async () => {
+    const out = await run('milestone_list', { full: true });
     expect(out).toContain('#13 [open] Entrega - 1/3 (33%)');
   });
 

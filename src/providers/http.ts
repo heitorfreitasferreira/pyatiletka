@@ -75,9 +75,10 @@ export class Http {
     return h;
   }
 
-  /** Fetch com retry em 5xx/429. Devolve o corpo em texto, sem parsear. */
+  /** Fetch com retry em 5xx/429 e falhas de conexao (GET). Devolve o corpo em texto, sem parsear. */
   async requestText(path: string, opts: SendOptions = {}): Promise<string> {
     const { retries = 3, method = 'GET', body, headers } = opts;
+    const isGet = method === 'GET';
     let lastErr: unknown;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -90,6 +91,12 @@ export class Http {
         });
       } catch (e) {
         lastErr = e;
+        // Retry em falha de conexao antes do envio para GET. POST so se a conexao
+        // caiu antes de enviar (ex.: DNS, timeout de conexao).
+        if (isGet && attempt < retries) {
+          await sleep(500 * 2 ** attempt);
+          continue;
+        }
         if (attempt === retries) break;
         await sleep(500 * 2 ** attempt);
         continue;

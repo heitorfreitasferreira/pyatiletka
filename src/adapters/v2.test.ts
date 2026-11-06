@@ -55,7 +55,7 @@ const boundTo = (issue: number): BindingStore => ({
 });
 
 describe('setupV2', () => {
-  it('registra as 36 tools com namespace por grupo, nomes iguais ao v1', async () => {
+  it('registra as 39 tools com namespace por grupo, nomes iguais ao v1', async () => {
     await setupV2(asV2());
     const names = plugin.tools.map((t) => `${t.namespace}_${t.name}`).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
@@ -64,7 +64,7 @@ describe('setupV2', () => {
   it('declara um namespace para cada grupo', async () => {
     await setupV2(asV2());
     expect(new Set(plugin.namespaces.map((n) => n.name))).toEqual(
-      new Set(['auth', 'issue', 'milestone', 'pr', 'ci', 'branch', 'commit'])
+      new Set(['auth', 'issue', 'milestone', 'pr', 'ci', 'branch', 'commit', 'repo'])
     );
   });
 

@@ -177,6 +177,7 @@ export type IssuePatch = {
   state?: 'open' | 'closed';
   stateReason?: 'completed' | 'not_planned';
   labels?: string[];
+  milestone?: string | number | null;
 };
 
 export type CreatePullInput = {
@@ -230,6 +231,16 @@ export interface GitHost {
   listIssues(repo: string, state: 'open' | 'closed' | 'all'): Promise<Issue[]>;
   createIssue(repo: string, input: CreateIssueInput): Promise<Issue>;
   updateIssue(repo: string, n: number, patch: IssuePatch): Promise<Issue>;
+  /** Lista todas as labels do repo. */
+  listLabels(repo: string): Promise<string[]>;
+
+  // -- runners ------------------------------------------------------------
+  /** Runners do repo. */
+  listRepoRunners(repo: string): Promise<Runner[]>;
+  /** Runners da org. */
+  listOrgRunners(org: string): Promise<Runner[]>;
+  /** Runners de instancia (admin). */
+  listInstanceRunners?(): Promise<Runner[]>;
 
   // -- comentarios ---------------------------------------------------------
   listComments(repo: string, n: number): Promise<IssueComment[]>;
@@ -279,18 +290,42 @@ export interface GitHost {
     opts?: { deleteBranch?: boolean }
   ): Promise<string>;
 
+  // -- repo files ------------------------------------------------------------
+  /** Le um arquivo ou diretorio de um repo em uma ref. */
+  getRepoFile(
+    repo: string,
+    path: string,
+    ref?: string
+  ): Promise<{
+    content: string;
+    encoding: 'base64' | 'text';
+    size: number;
+    type: 'file' | 'dir';
+    name: string;
+  }>;
+
   // -- pipeline ------------------------------------------------------------
   listRuns(repo: string, opts: ListRunsOptions): Promise<Run[]>;
   getRun(repo: string, id: number): Promise<Run>;
   getRunLogs(repo: string, id: number, opts: LogsOptions): Promise<string>;
   getActionsConfig(repo: string): Promise<ActionsConfig>;
+  /** Cria ou atualiza uma variavel de CI. */
+  upsertActionsVariable(repo: string, name: string, value: string): Promise<void>;
+  /** Remove uma variavel de CI. */
+  deleteActionsVariable(repo: string, name: string): Promise<void>;
+  /** Cria ou atualiza um secret de CI (valor nao e devolvido). */
+  upsertActionsSecret(repo: string, name: string, value: string): Promise<void>;
+  /** Remove um secret de CI. */
+  deleteActionsSecret(repo: string, name: string): Promise<void>;
   dispatchWorkflow(
     repo: string,
     workflow: string,
     ref: string,
     inputs?: Record<string, string>
   ): Promise<void>;
-  listRunners(repo: string): Promise<Runner[]>;
+  listRepoRunners(repo: string): Promise<Runner[]>;
+  listOrgRunners(org: string): Promise<Runner[]>;
+  listInstanceRunners?(): Promise<Runner[]>;
 
   // -- branches ------------------------------------------------------------
   listBranches(repo: string): Promise<Branch[]>;

@@ -9,7 +9,7 @@ import { classify, priorityOf, priorityLabel, type IssueState } from './format';
  */
 
 /**
- * Resolve um marco por id (`13`, `#13`) ou por titulo parcial (`Lab`).
+ * Resolve um marco por id (`13`, `#13`) ou por titulo (exato, prefixo, sem caixa).
  * Quem vem de um comando ja passa o id, entao id tem precedencia.
  */
 export function findMilestone(all: Milestone[], ref: string, repo: string): Milestone {
@@ -18,18 +18,29 @@ export function findMilestone(all: Milestone[], ref: string, repo: string): Mile
   if (byId) return byId;
 
   const needle = wanted.toLowerCase();
+  // 1. Titulo exato (sem caixa)
+  const exact = all.find((m) => m.title.toLowerCase() === needle);
+  if (exact) return exact;
+  // 2. Prefixo (sem caixa)
+  const byPrefix = all.filter((m) => m.title.toLowerCase().startsWith(needle));
+  if (byPrefix.length === 1) return byPrefix[0];
+  // 3. Contem (sem caixa) - busca mais ampla
   const byTitle = all.filter((m) => m.title.toLowerCase().includes(needle));
   if (byTitle.length === 1) return byTitle[0];
-  if (!byTitle.length) {
+  if (!byTitle.length && !byPrefix.length) {
     const open = all.filter((m) => m.state === 'open').map((m) => `#${m.id} ${m.title}`);
     throw new Error(
       `marco "${ref}" nao encontrado em ${repo}. Abre: ${open.join(' | ') || '(nenhum)'}`
     );
   }
+  const candidates = byPrefix.length ? byPrefix : byTitle;
   throw new Error(
-    `"${ref}" casa com ${byTitle.length} marcos: ${byTitle
+    `"${ref}" casa com ${candidates.length} marcos: ${candidates
       .map((m) => `#${m.id} ${m.title}`)
-      .join(' | ')}. Seja mais especifico (id ou titulo mais longo).`
+      .join(' | ')}. Seja mais especifico (id ou titulo mais longo). Abre: ${all
+      .filter((m) => m.state === 'open')
+      .map((m) => `#${m.id} ${m.title}`)
+      .join(' | ')}`
   );
 }
 

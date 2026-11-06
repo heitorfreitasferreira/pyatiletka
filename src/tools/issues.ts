@@ -176,35 +176,51 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
     }),
 
     issue_binding: tool({
-      description: 'Mostra a qual issue esta sessao esta vinculada, ou diz que nao ha vinculo.',
-      args: {},
-      async execute(_args, toolCtx) {
+      description:
+        'Mostra a qual issue esta sessao esta vinculada, ou diz que nao ha vinculo. Por padrao so mostra numero, titulo e estado. Use `full: true` para o corpo completo.',
+      args: {
+        full: tool.schema
+          .boolean()
+          .optional()
+          .describe('Default false: so numero, titulo, estado. True: corpo completo.'),
+      },
+      async execute(args, toolCtx) {
         const b = await store.read(toolCtx.sessionID);
         if (!b) return 'Nenhuma issue vinculada nesta sessao.';
         const issue = b.issue
           ? await ctx.host.getIssue(b.repo, b.issue).catch(() => undefined)
           : undefined;
-        return [
-          `repo=${b.repo} issue=${b.issue ?? '-'} marco=${b.milestone ?? '-'} desde=${b.boundAt}`,
-          issue ? fmtIssue(issue) : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
+        if (!issue) {
+          return `repo=${b.repo} issue=${b.issue ?? '-'} marco=${b.milestone ?? '-'} desde=${b.boundAt} (falha ao ler issue)`;
+        }
+        if (args.full) {
+          return [
+            `repo=${b.repo} issue=${b.issue ?? '-'} marco=${b.milestone ?? '-'} desde=${b.boundAt}`,
+            fmtIssue(issue),
+          ].join('\n');
+        }
+        // Formato curto: numero, titulo, estado
+        const state = issue.state === 'closed' ? 'closed' : classify(issue);
+        return `repo=${b.repo} issue=${b.issue ?? '-'} marco=${b.milestone ?? '-'} desde=${b.boundAt}\n#${issue.number} [${state}] ${issue.title}`;
       },
     }),
 
     issue_view: tool({
       description:
-        'Le uma issue (titulo, corpo, labels, marco, estado), resolve as dependencias e traz TODOS os comentarios: eles sao o log de trabalho e contexto obrigatorio. Use antes de trabalhar.',
+        'Le uma issue (titulo, corpo, labels, marco, estado), resolve as dependencias e traz os ultimos 3 comentarios por padrao. Use `comments: "all"` para todos, `comments: 0` para pular, ou `comments: N` para N mais recentes.',
       args: {
         issue: issueArg,
         repo: repoArgHere,
         comments: tool.schema
-          .number()
+          .union([tool.schema.number(), tool.schema.string()])
           .optional()
           .describe(
-            'Quantos comentarios trazer, dos mais recentes. Default: todos. Use 0 para pular.'
+            'Quantos comentarios trazer: numero (ex.: 3), "all" para todos, 0 para pular. Default: 3 (ultimos 3).'
           ),
+        brief: tool.schema
+          .boolean()
+          .optional()
+          .describe('So cabecalho e dependencias, sem corpo e sem comentarios.'),
       },
       async execute(args, toolCtx) {
         const { repo, n } = await target(ctx, store, args, toolCtx.sessionID);
@@ -223,11 +239,20 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
             : '  depende de: nada'
         );
 
+        if (args.brief) {
+          return out.join('\n');
+        }
+
         out.push('', '--- corpo ---', issue.body ?? '(vazio)');
 
-        if (args.comments !== 0) {
+        // Parse comments arg: "all" | number | undefined (default 3)
+        let commentsLimit: number | 'all' = 3;
+        if (args.comments === 'all') commentsLimit = 'all';
+        else if (typeof args.comments === 'number') commentsLimit = args.comments;
+
+        if (commentsLimit !== 0) {
           const all = await ctx.host.listComments(repo, n);
-          const shown = args.comments && args.comments > 0 ? all.slice(-args.comments) : all;
+          const shown = commentsLimit === 'all' ? all : all.slice(-commentsLimit);
           out.push('', `--- comentarios (${all.length}) ---`);
           if (all.length && all.length < (issue.comments ?? 0)) {
             out.push(
@@ -236,6 +261,11 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
           }
           if (!all.length) out.push('(nenhum)');
           for (const c of shown) out.push('', fmtComment(c));
+          if (commentsLimit !== 'all' && all.length > commentsLimit) {
+            out.push(
+              `  ... ${all.length - commentsLimit} comentario(s) mais antigo(s) omitidos. Use comments: "all" para ver tudo.`
+            );
+          }
         }
 
         return out.join('\n');
@@ -244,7 +274,7 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
 
     issue_list: tool({
       description:
-        'Lista issues (default: abertas). Filtra por marco, estado logico (todo/in-progress/blocked/need-info/done), autor, assignee e janela de datas. Passe `repos` (lista ou glob) para varrer varios repos.',
+        'Lista issues (default: abertas). Filtra por marco, estado logico (todo/in-progress/blocked/need-info/done), autor, assignee e janela de datas. Passe `repos` (lista ou glob) para varrer varios repos. Por padrao so mostra numero, titulo, labels e marco. Use `brief: false` para saida completa.',
       args: {
         repo: repoArgHere,
         repos: tool.schema
@@ -271,10 +301,17 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
           .optional()
           .describe('YYYY-MM-DD[:created|:updated|:closed] <= data (default created).'),
         limit: tool.schema.number().optional().describe('Max itens (default 60).'),
+        brief: tool.schema
+          .boolean()
+          .optional()
+          .describe(
+            'Default true: so numero, titulo, labels, marco. False: saida completa com corpo.'
+          ),
       },
       async execute(args) {
         const state = args.state ?? 'open';
         const limit = args.limit ?? 60;
+        const brief = args.brief !== false; // default true
         const [sinceDay, sinceKind = 'created'] = (args.since ?? '').split(':');
         const [untilDay, untilKind = 'created'] = (args.until ?? '').split(':');
 
@@ -307,6 +344,8 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
         const sorted = (items: Issue[]) =>
           items.sort((a, b) => priorityOf(a) - priorityOf(b) || a.number - b.number);
 
+        const fmt = brief ? (i: Issue) => fmtIssue(i).split('\n')[0] : fmtIssue;
+
         // Repo unico quando veio argumento ou quando existe padrao. So varre a
         // org quando o pedido foi `repos` (ou quando nao ha padrao nenhum).
         const single = args.repo ?? (args.repos?.length ? undefined : ctx.defaultRepo);
@@ -320,7 +359,7 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
             if (!items.length) continue;
             total += items.length;
             const header = `${repo} ${'-'.repeat(Math.max(0, 44 - repo.length))}`;
-            blocks.push(`${header}\n${sorted(items).slice(0, limit).map(fmtIssue).join('\n\n')}`);
+            blocks.push(`${header}\n${sorted(items).slice(0, limit).map(fmt).join('\n')}`);
           }
           if (!blocks.length)
             return 'Nenhuma issue encontrada com esses filtros nos repos indicados.';
@@ -329,7 +368,14 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
 
         const { items } = await one(resolve(single));
         if (!items.length) return 'Nenhuma issue encontrada com esses filtros.';
-        return sorted(items).slice(0, limit).map(fmtIssue).join('\n\n');
+        const out = sorted(items).slice(0, limit).map(fmt).join('\n');
+        if (brief && items.length > limit) {
+          return (
+            out +
+            `\n... ${items.length - limit} issue(s) omitidas. Use limit maior ou brief: false.`
+          );
+        }
+        return out;
       },
     }),
 
@@ -362,7 +408,7 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
     }),
 
     issue_create: tool({
-      description: `Cria uma issue (task) no repo. Com \`template\` e sem \`body\`, monta o corpo a partir dos campos. \`depende\` grava as dependencias na secao de dependencias da API, que e o que o \`${refTool('milestone_view')}\` le para montar a fila. O texto passa pela checagem de prosa: travessao, ponto e virgula e frases de formula sao recusados.`,
+      description: `Cria uma issue (task) no repo. Com \`template\` e sem \`body\`, monta o corpo a partir dos campos. \`depende\` grava as dependencias na secao de dependencias da API, que e o que o \`${refTool('milestone_view')}\` le para montar a fila. O texto passa pela checagem de prosa: travessao, ponto e virgula e frases de formula sao recusados. \`bind: true\` vincula a sessao a issue criada.`,
       args: {
         title: tool.schema.string(),
         body: tool.schema
@@ -395,20 +441,32 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
           .describe('Secao `## Contexto`: o que nao cabe em uma frase.'),
         milestone: tool.schema.string().optional().describe('Id do marco ou titulo parcial.'),
         labels: tool.schema
-          .array(tool.schema.string())
+          .union([tool.schema.array(tool.schema.string()), tool.schema.string()])
           .optional()
           .describe(
-            "Ex.: ['Kind/Enhancement','Priority/Medium']. Sem `template`, o padrao e Priority/Medium."
+            "Ex.: ['Kind/Enhancement','Priority/Medium'] ou 'Kind/Enhancement,Priority/Medium'. Sem `template`, o padrao e Priority/Medium (so se existir no repo)."
           ),
+        bind: tool.schema
+          .boolean()
+          .optional()
+          .describe('Vincula a sessao a issue criada (default false).'),
         repo: repoArgHere,
       },
-      async execute(args) {
+      async execute(args, toolCtx) {
         const repo = resolve(args.repo);
         if (args.body && args.template) throw new Error('use `body` ou `template`, nao os dois.');
 
         let body = args.body ?? '';
         let labels = args.labels;
         let title = args.title;
+
+        // Normalizar labels: aceita string separada por virgula
+        if (typeof labels === 'string') {
+          labels = labels
+            .split(',')
+            .map((l) => l.trim())
+            .filter(Boolean);
+        }
 
         if (args.template) {
           const tpl = loadTemplate(directory, repo, args.template);
@@ -419,8 +477,11 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
           }
           if (!labels?.length && tpl.labels.length) labels = tpl.labels;
         } else if (!labels?.length) {
-          // Sem template, prioridade default para o `milestone_view` ordenar.
-          labels = ['Priority/Medium'];
+          // Sem template, prioridade default so se existir no repo.
+          const allLabels = await ctx.host.listLabels(repo);
+          if (allLabels.includes('Priority/Medium')) {
+            labels = ['Priority/Medium'];
+          }
         }
 
         const warn = assertProse(body, 'corpo da issue', ctx.config.prose);
@@ -436,6 +497,36 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
         // mostra e o que o `milestone_view` le.
         const blockers = parseRefs(args.depende);
         if (blockers.length) await ctx.host.addDependencies(repo, created.number, blockers);
+
+        // Bind se pedido
+        if (args.bind) {
+          const file = await store.write(toolCtx.sessionID, {
+            repo,
+            issue: created.number,
+            milestone: args.milestone ?? created.milestone?.title,
+            boundAt: new Date().toISOString(),
+          });
+          ctx.notify(`Issue criada e vinculada: ${repo}#${created.number}`, 'success');
+          const where = file ? ` (arquivo: ${file})` : '';
+          const saved = await ctx.host
+            .listDependencies(repo, created.number)
+            .catch(() => [] as Issue[]);
+          const after = await ctx.host.getIssue(repo, created.number);
+          return [
+            `Criada a partir de ${args.template ? `template "${args.template}"` : 'body literal'}.`,
+            fmtIssue(after),
+            blockers.length
+              ? `  depende de: ${saved.map((d) => `#${d.number}`).join(', ')}`
+              : '  depende de: nada',
+            '',
+            '--- corpo ---',
+            body,
+            warn,
+            `Vinculado a ${repo}#${created.number}${where}`,
+          ]
+            .filter(Boolean)
+            .join('\n');
+        }
 
         ctx.notify(`Issue criada: ${repo}#${created.number}`, 'success');
         const saved = await ctx.host
@@ -558,36 +649,72 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
 
     issue_update: tool({
       description:
-        'Atualiza titulo, corpo e labels da issue. O corpo passa pela checagem de prosa. Use `add_labels` para transicao de status: uma label `Status/` nova substitui a anterior.',
+        'Atualiza titulo, corpo, labels e marco da issue. O corpo passa pela checagem de prosa. Use `add_labels` para transicao de status: uma label `Status/` nova substitui a anterior. `milestone` aceita id ou titulo (ou `null` para remover).',
       args: {
         issue: tool.schema.string().optional(),
         repo: repoArgHere,
-        add_labels: tool.schema.array(tool.schema.string()).optional(),
-        remove_labels: tool.schema.array(tool.schema.string()).optional(),
+        add_labels: tool.schema
+          .union([tool.schema.array(tool.schema.string()), tool.schema.string()])
+          .optional()
+          .describe('Labels a adicionar. Aceita array ou string separada por virgula.'),
+        remove_labels: tool.schema
+          .union([tool.schema.array(tool.schema.string()), tool.schema.string()])
+          .optional()
+          .describe('Labels a remover. Aceita array ou string separada por virgula.'),
         title: tool.schema.string().optional(),
         body: tool.schema.string().optional().describe('Novo corpo da issue (substitui o atual).'),
+        milestone: tool.schema
+          .union([tool.schema.string(), tool.schema.number(), tool.schema.null()])
+          .optional()
+          .describe('Id do marco, titulo parcial ou `null` para remover.'),
       },
       async execute(args, toolCtx) {
         const { repo, n } = await target(ctx, store, args, toolCtx.sessionID);
         const warn = assertProse(args.body, 'corpo da issue', ctx.config.prose);
 
-        const patch: { title?: string; body?: string; labels?: string[] } = {};
+        const patch: {
+          title?: string;
+          body?: string;
+          labels?: string[];
+          milestone?: string | number | null;
+        } = {};
         if (args.title) patch.title = args.title;
         if (args.body !== undefined) patch.body = args.body;
+
+        // Normalizar labels: aceita string separada por virgula
+        const normalizeLabels = (val?: string | string[]) => {
+          if (!val) return [] as string[];
+          if (typeof val === 'string')
+            return val
+              .split(',')
+              .map((l) => l.trim())
+              .filter(Boolean);
+          return val;
+        };
 
         if (args.add_labels?.length || args.remove_labels?.length) {
           const cur = await ctx.host.getIssue(repo, n);
           const next = new Set(cur.labels);
-          for (const l of args.remove_labels ?? []) next.delete(l);
-          for (const l of args.add_labels ?? []) next.add(l);
+          for (const l of normalizeLabels(args.remove_labels)) next.delete(l);
+          for (const l of normalizeLabels(args.add_labels)) next.add(l);
           // Transicao de status e exclusiva: a familia nova substitui a antiga.
-          const added = args.add_labels?.filter((l) => l.startsWith('Status/')) ?? [];
+          const added = normalizeLabels(args.add_labels).filter((l) => l.startsWith('Status/'));
           if (added.length) {
             for (const l of [...next]) {
               if (l.startsWith('Status/') && !added.includes(l)) next.delete(l);
             }
           }
           patch.labels = [...next];
+        }
+
+        if (args.milestone !== undefined) {
+          if (args.milestone === null) {
+            patch.milestone = null;
+          } else {
+            const all = await ctx.host.listMilestones(repo);
+            const ms = findMilestone(all, String(args.milestone), repo);
+            patch.milestone = ms.id;
+          }
         }
 
         if (!Object.keys(patch).length) throw new Error('nada para atualizar.');
@@ -637,7 +764,7 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
 
     milestone_view: tool({
       description:
-        'Estado completo de um marco em UMA chamada: cabecalho com contagem por estado, fila de dependencias e a proxima issue sugerida. Aceita id numerico (`13`) ou titulo parcial (`Lab`). Substitui milestone_list + issue_list + varias issue_view.',
+        'Estado completo de um marco em UMA chamada: cabecalho com contagem por estado, fila de dependencias e a proxima issue sugerida. Aceita id numerico (`13`) ou titulo parcial (`Lab`). Substitui milestone_list + issue_list + varias issue_view. Descricao truncada por padrao; use `full: true` para a descricao completa.',
       args: {
         milestone: tool.schema
           .string()
@@ -647,6 +774,10 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
           .enum(['open', 'closed', 'all'])
           .optional()
           .describe('Estado das issues (default open; use `all` para ver o historico).'),
+        full: tool.schema
+          .boolean()
+          .optional()
+          .describe('Default false: descricao truncada a 4000 chars. True: descricao completa.'),
       },
       async execute(args) {
         const repo = resolve(args.repo);
@@ -660,12 +791,22 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
 
         const deps = await milestoneDeps(ctx, repo, items);
         const q = milestoneQueue(repo, ms, items, deps);
-        return [...q.head, '', ...q.sections, ...q.suggestion].join('\n').trimEnd();
+
+        // Truncar descricao se nao full
+        let head = [...q.head];
+        if (!args.full) {
+          head = head.map((line) => {
+            if (line.startsWith('  ')) return line.slice(0, 200); // linhas de descricao
+            return line;
+          });
+        }
+
+        return [...head, '', ...q.sections, ...q.suggestion].join('\n').trimEnd();
       },
     }),
 
     milestone_list: tool({
-      description: `Lista marcos com contagem (fechadas/total) e descricao resumida. Passe \`milestone\` (id ou titulo parcial) para resolver um so. Para ver as issues e a fila de dependencias, use \`${refTool('milestone_view')}\`.`,
+      description: `Lista marcos com contagem (fechadas/total). Por padrao so mostra o nome do marco. Passe \`milestone\` (id ou titulo parcial) para resolver um so. Use \`full: true\` para contagem, due date e descricao. Para ver as issues e a fila de dependencias, use \`${refTool('milestone_view')}\`.`,
       args: {
         repo: repoArgHere,
         state: tool.schema.enum(['open', 'closed', 'all']).optional(),
@@ -673,6 +814,10 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
           .string()
           .optional()
           .describe('Id (`13`) ou titulo parcial: resolve e mostra so esse marco.'),
+        full: tool.schema
+          .boolean()
+          .optional()
+          .describe('Default false: so nome. True: contagem, due date e descricao.'),
       },
       async execute(args) {
         const repo = resolve(args.repo);
@@ -681,6 +826,9 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
           ? [findMilestone(all, args.milestone, repo)]
           : all.filter((m) => !args.state || m.state === args.state);
         if (!items.length) return `Nenhum marco ${args.state ?? 'aberto'} em ${repo}.`;
+        if (!args.full) {
+          return items.map((m) => `#${m.id} [${m.state}] ${m.title}`).join('\n');
+        }
         return items
           .map((m: Milestone) => {
             const total = m.openIssues + m.closedIssues;

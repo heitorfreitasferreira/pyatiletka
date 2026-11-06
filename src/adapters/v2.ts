@@ -22,6 +22,7 @@ const NAMESPACES: Record<ToolGroup, string> = {
   ci: 'Pipelines de CI',
   branch: 'Branches e promocao',
   commit: 'Commits do clone local',
+  repo: 'Repositorio e arquivos',
 };
 
 function toInputSchema(args: ToolSpec['args']): Record<string, unknown> {
