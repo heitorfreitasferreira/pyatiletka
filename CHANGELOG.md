@@ -22,6 +22,13 @@
 * `@opencode/plugin` entra como dependencia e fica external no bundle
 * `dist/cli.js`, o binario do servidor MCP e dos hooks, buildado com alvo node
 
+## [2.4.0](https://github.com/heitorfreitasferreira/pyatiletka/compare/v2.3.0...v2.4.0) (2026-11-06)
+
+
+### Features
+
+* correcoes de ergonomia, providers e tools de repositorio ([35905c4](https://github.com/heitorfreitasferreira/pyatiletka/commit/35905c49a1df434c13ca0b43dd15df0c3982f64e))
+
 ## [2.3.0](https://github.com/heitorfreitasferreira/pyatiletka/compare/v2.2.0...v2.3.0) (2026-11-06)
 
 
