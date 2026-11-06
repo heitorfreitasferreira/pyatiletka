@@ -50,6 +50,13 @@ export type IssueComment = {
   htmlUrl?: string;
 };
 
+/** Arquivo anexado a uma issue. */
+export type IssueAsset = {
+  name: string;
+  /** URL de download, pronta para embutir em markdown. */
+  url: string;
+};
+
 export type Review = {
   id: number;
   state?: string;
@@ -228,6 +235,14 @@ export interface GitHost {
   listComments(repo: string, n: number): Promise<IssueComment[]>;
   createComment(repo: string, n: number, body: string): Promise<void>;
   updateComment(repo: string, commentId: number, body: string): Promise<void>;
+
+  // -- anexos ----------------------------------------------------------------
+  /** Anexa um arquivo a uma issue. Nem todo provider tem API para isso. */
+  uploadIssueAsset(
+    repo: string,
+    n: number,
+    file: { name: string; bytes: Uint8Array; contentType?: string }
+  ): Promise<IssueAsset>;
 
   // -- dependencias nativas -------------------------------------------------
   listDependencies(repo: string, n: number): Promise<Issue[]>;

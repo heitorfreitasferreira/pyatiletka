@@ -552,3 +552,96 @@ describe('vinculo em arquivo', () => {
     expect(bindingFile(dir, SESSION)).toContain('.opencode/.state/issue-sessions');
   });
 });
+
+describe('issue_attach', () => {
+  it('anexa o arquivo, devolve a URL e o markdown de player para video', async () => {
+    writeFileSync(join(dir, 'demo.mp4'), 'conteudo');
+    const out = await run('issue_attach', { issue: '1', path: 'demo.mp4' });
+    expect(host.called('uploadIssueAsset')[0]?.args).toEqual([REPO, 1, 'demo.mp4', 8, 'video/mp4']);
+    expect(out).toContain('https://git.example/attachments/demo.mp4');
+    expect(out).toContain('Markdown: ![demo.mp4](https://git.example/attachments/demo.mp4)');
+    expect(host.called('createComment')).toHaveLength(0);
+  });
+
+  it('usa link simples para arquivo que nao e midia', async () => {
+    writeFileSync(join(dir, 'log.txt'), 'x');
+    const out = await run('issue_attach', { issue: '1', path: 'log.txt' });
+    expect(out).toContain('Markdown: [log.txt](https://git.example/attachments/log.txt)');
+  });
+
+  it('com comment publica o comentario com o anexo embutido', async () => {
+    writeFileSync(join(dir, 'demo.mp4'), 'conteudo');
+    const out = await run('issue_attach', {
+      issue: '1',
+      path: 'demo.mp4',
+      comment: 'Resumo em video',
+    });
+    const body = host.called('createComment')[0]?.args[2] as string;
+    expect(body).toStartWith('Resumo em video');
+    expect(body).toContain('![demo.mp4](https://git.example/attachments/demo.mp4)');
+    expect(out).toContain('comentario publicado');
+  });
+
+  it('comentario com travessao impede o upload', async () => {
+    writeFileSync(join(dir, 'demo.mp4'), 'conteudo');
+    expect(
+      await runFail('issue_attach', { issue: '1', path: 'demo.mp4', comment: 'veja — video' })
+    ).toContain('travessao');
+    expect(host.called('uploadIssueAsset')).toHaveLength(0);
+  });
+
+  it('falha clara quando o arquivo nao existe', async () => {
+    expect(await runFail('issue_attach', { issue: '1', path: 'nao-existe.mp4' })).toContain(
+      'nao-existe.mp4'
+    );
+    expect(host.called('uploadIssueAsset')).toHaveLength(0);
+  });
+});
+
+describe('lembrete ao fechar (closeHint)', () => {
+  const HINT = 'Considere oferecer um resumo do que foi entregue.';
+
+  function withHint(hint?: string) {
+    tools = toV1Tools(
+      issueTools({
+        ctx: { ...ctxFor(host), config: makeConfig({ closeHint: hint }) },
+        directory: dir,
+      })
+    ) as never;
+  }
+
+  it('sem closeHint nao acrescenta nada', async () => {
+    withHint(undefined);
+    const out = await run('issue_close', { issue: '1' });
+    expect(out).toBe('org/repo#1 fechada.');
+  });
+
+  it('com closeHint acrescenta o lembrete', async () => {
+    withHint(HINT);
+    expect(await run('issue_close', { issue: '1' })).toContain(HINT);
+  });
+
+  it('avisa quando o fechamento deixa o marco sem issues abertas', async () => {
+    withHint(HINT);
+    host.state.issues[0].milestone = { id: 13, title: 'Entrega' };
+    host.state.milestones = [
+      makeMilestone({ id: 13, title: 'Entrega', openIssues: 0, closedIssues: 3 }),
+    ];
+    const out = await run('issue_close', { issue: '1' });
+    expect(out).toContain('Marco "Entrega" ficou sem issues abertas.');
+    expect(out).toContain(HINT);
+  });
+
+  it('nao avisa de marco enquanto ainda ha issue aberta nele', async () => {
+    withHint(undefined);
+    host.state.issues[0].milestone = { id: 13, title: 'Entrega' };
+    const out = await run('issue_close', { issue: '1' });
+    expect(out).not.toContain('ficou sem issues abertas');
+  });
+
+  it('milestone_update fechando acrescenta o lembrete', async () => {
+    withHint(HINT);
+    const out = await run('milestone_update', { milestone: 'Entrega', state: 'closed' });
+    expect(out).toContain(HINT);
+  });
+});

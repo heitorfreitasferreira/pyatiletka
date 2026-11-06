@@ -6,7 +6,7 @@ GitHub.
 
 ## O que entra
 
-- **Servidor MCP** com as 38 tools do pacote: `issue_bind`, `milestone_view`,
+- **Servidor MCP** com as 39 tools do pacote: `issue_bind`, `milestone_view`,
   `pr_merge`, `ci_wait` e o resto.
 - **Tres hooks**: contexto do vinculo no inicio da sessao e a cada prompt, mais a
   espera do CI depois de um `git push`.
@@ -67,5 +67,5 @@ A mesma resolucao do pacote: ambiente e `.env`, depois um `gh` ou `tea` ja
 logado, depois login manual. `auth_status` mostra a origem, `auth_login` mostra o
 comando.
 
-A documentacao completa, as variaveis de ambiente e as 38 tools estao no
+A documentacao completa, as variaveis de ambiente e as 39 tools estao no
 [README do pacote](https://github.com/heitorfreitasferreira/pyatiletka#readme).

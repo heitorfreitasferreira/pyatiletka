@@ -4,6 +4,7 @@ import { shapeLog } from '../core/logs';
 import { GitHostError, Http } from './http';
 import type {
   CreateIssueInput,
+  IssueAsset,
   CreatePullInput,
   GitHost,
   ActionsConfig,
@@ -280,6 +281,16 @@ export class GitHubHost implements GitHost {
 
   async createComment(repo: string, n: number, body: string): Promise<void> {
     await this.req(`${issuePath(repo, n)}/comments`, 'POST', { body });
+  }
+
+  async uploadIssueAsset(
+    _repo: string,
+    _n: number,
+    _file: { name: string; bytes: Uint8Array; contentType?: string }
+  ): Promise<IssueAsset> {
+    throw new Error(
+      'O GitHub nao tem API para anexar arquivo em issue. Suba o arquivo em outro lugar (release asset, repo) e comente com o link.'
+    );
   }
 
   async updateComment(repo: string, commentId: number, body: string): Promise<void> {

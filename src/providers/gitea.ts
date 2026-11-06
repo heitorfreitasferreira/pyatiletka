@@ -4,6 +4,7 @@ import { shapeLog } from '../core/logs';
 import { GitHostError, Http } from './http';
 import type {
   CreateIssueInput,
+  IssueAsset,
   CreatePullInput,
   GitHost,
   ActionsConfig,
@@ -363,6 +364,23 @@ export class GiteaHost implements GitHost {
     });
   }
 
+  async uploadIssueAsset(
+    repo: string,
+    n: number,
+    file: { name: string; bytes: Uint8Array; contentType?: string }
+  ): Promise<IssueAsset> {
+    const form = new FormData();
+    const blob = new Blob([file.bytes as BlobPart], {
+      type: file.contentType ?? 'application/octet-stream',
+    });
+    form.append('attachment', blob, file.name);
+    const out = await this.http.upload<{ name: string; browser_download_url: string }>(
+      `${issuePath(repo, n)}/assets?name=${encodeURIComponent(file.name)}`,
+      form
+    );
+    return { name: out.name, url: out.browser_download_url };
+  }
+
   async updateComment(repo: string, commentId: number, body: string): Promise<void> {
     await this.http.request(`/repos/${repo}/issues/comments/${commentId}`, {
       pageParam: 'limit',
@@ -618,7 +636,7 @@ export class GiteaHost implements GitHost {
           ? 'squash'
           : style === 'rebase'
             ? 'rebase'
-            : 'ff-only';
+            : 'fast-forward-only';
     await this.http.request(`${pullPath(repo, n)}/merge`, {
       pageParam: 'limit',
       method: 'POST',

@@ -150,3 +150,19 @@ describe('opcoes do plugin (v2)', () => {
     expect(c.token).toBe('do-ambiente');
   });
 });
+
+describe('closeHint', () => {
+  it('vem da option closeHint', () => {
+    const cfg = loadConfig({ GITEA_URL: 'https://g.test' }, 'gitea', {
+      closeHint: ' ofereca um resumo ',
+    });
+    expect(cfg.closeHint).toBe('ofereca um resumo');
+  });
+
+  it('vem da variavel de ambiente e fica vazio por padrao', () => {
+    expect(
+      loadConfig({ GITEA_URL: 'https://g.test', PYATILETKA_CLOSE_HINT: 'x' }, 'gitea').closeHint
+    ).toBe('x');
+    expect(loadConfig({ GITEA_URL: 'https://g.test' }, 'gitea').closeHint).toBeUndefined();
+  });
+});
