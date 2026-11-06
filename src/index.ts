@@ -36,6 +36,7 @@ export const TOOL_NAMES = [
   'issue_create',
   'issue_depend',
   'issue_comment',
+  'issue_attach',
   'issue_update',
   'issue_close',
   'issue_reopen',

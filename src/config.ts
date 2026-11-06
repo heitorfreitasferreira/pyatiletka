@@ -35,6 +35,11 @@ export type Config = {
    */
   promoteOrder: string[];
   prose: ProseMode;
+  /**
+   * Lembrete anexado ao resultado de `issue_close` e ao fechamento de marco. Texto livre
+   * para o agente, por exemplo oferecer um resumo do que foi entregue. Vazio = sem lembrete.
+   */
+  closeHint?: string;
 };
 
 export class ConfigError extends Error {}
@@ -110,6 +115,7 @@ export function optionsToEnv(options?: Record<string, unknown>): NodeJS.ProcessE
   str('defaultBranch', 'PYATILETKA_DEFAULT_BRANCH');
   str('login', 'PYATILETKA_LOGIN');
   str('prose', 'PYATILETKA_PROSE');
+  str('closeHint', 'PYATILETKA_CLOSE_HINT');
   arr('promoteOrder', 'PYATILETKA_PROMOTE_ORDER');
   return out;
 }
@@ -154,6 +160,7 @@ export function loadConfig(
   const login = env.PYATILETKA_LOGIN?.trim() || undefined;
   const promoteOrder = readPromoteOrder(env);
   const prose = readProse(env);
+  const closeHint = env.PYATILETKA_CLOSE_HINT?.trim() || undefined;
 
   if (provider === 'gitea') {
     const rawUrl = env.GITEA_URL?.trim();
@@ -174,6 +181,7 @@ export function loadConfig(
       defaultBranch,
       promoteOrder,
       prose,
+      closeHint,
     };
   }
 
@@ -190,6 +198,7 @@ export function loadConfig(
       defaultBranch,
       promoteOrder,
       prose,
+      closeHint,
     };
   }
 
@@ -207,5 +216,6 @@ export function loadConfig(
     defaultBranch,
     promoteOrder,
     prose,
+    closeHint,
   };
 }

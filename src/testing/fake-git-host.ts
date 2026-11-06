@@ -1,4 +1,5 @@
 import type {
+  IssueAsset,
   CreateIssueInput,
   CreatePullInput,
   GitHost,
@@ -181,6 +182,15 @@ export class FakeGitHost implements GitHost {
       ...(this.state.comments[n] ?? []),
       { id, body, user: 'alguem', createdAt: '2026-01-01T00:00:00Z' },
     ];
+  }
+
+  async uploadIssueAsset(
+    repo: string,
+    n: number,
+    file: { name: string; bytes: Uint8Array; contentType?: string }
+  ): Promise<IssueAsset> {
+    this.note('uploadIssueAsset', [repo, n, file.name, file.bytes.length, file.contentType]);
+    return { name: file.name, url: `https://git.example/attachments/${file.name}` };
   }
 
   async updateComment(repo: string, commentId: number, body: string): Promise<void> {

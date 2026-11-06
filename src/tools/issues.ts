@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { basename, resolve as resolvePath } from 'node:path';
 import { tool } from '@opencode-ai/plugin';
 import { toolRef, toolSpecs, type ToolSpec } from './spec';
 import { assertProse } from '../prose';
@@ -71,6 +73,58 @@ async function milestoneDeps(ctx: Ctx, repo: string, items: Issue[]): Promise<De
     })
   );
   return { inside, outside };
+}
+
+const MIME: Record<string, string> = {
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  pdf: 'application/pdf',
+  txt: 'text/plain',
+  md: 'text/markdown',
+  json: 'application/json',
+  zip: 'application/zip',
+};
+
+const EMBED = new Set(['mp4', 'webm', 'mov', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
+
+const extOf = (name: string): string => name.split('.').pop()?.toLowerCase() ?? '';
+
+/** Markdown para embutir o anexo: player ou imagem quando da, link nos outros casos. */
+function embedAsset(asset: { name: string; url: string }): string {
+  return EMBED.has(extOf(asset.name))
+    ? `![${asset.name}](${asset.url})`
+    : `[${asset.name}](${asset.url})`;
+}
+
+/**
+ * Avisos ao fechar: marco que ficou sem issues abertas e o lembrete configurado em
+ * `closeHint`. Best-effort: falha ao consultar marco nao desfaz o fechamento.
+ */
+async function closeNotes(
+  ctx: Ctx,
+  repo: string,
+  milestone?: { id: string | number; title: string } | null
+): Promise<string[]> {
+  const out: string[] = [];
+  if (milestone) {
+    try {
+      const m = (await ctx.host.listMilestones(repo)).find(
+        (x) => String(x.id) === String(milestone.id)
+      );
+      if (m && m.openIssues === 0) out.push(`Marco "${m.title}" ficou sem issues abertas.`);
+    } catch {
+      // sem aviso de marco, o resto do fechamento segue
+    }
+  }
+  if (ctx.config.closeHint) out.push(ctx.config.closeHint);
+  return out;
 }
 
 export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInput): ToolSpec[] {
@@ -461,6 +515,47 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
       },
     }),
 
+    issue_attach: tool({
+      description:
+        'Anexa um arquivo local (video, imagem, log) a uma issue e devolve a URL e o markdown para embutir. Com `comment`, publica tambem um comentario com o anexo embutido (passa pela checagem de prosa). So Gitea: o GitHub nao tem API de anexo em issue.',
+      args: {
+        path: tool.schema
+          .string()
+          .describe('Caminho do arquivo, absoluto ou relativo ao diretorio.'),
+        issue: tool.schema
+          .string()
+          .optional()
+          .describe('Numero da issue; padrao = issue vinculada a sessao.'),
+        repo: repoArgHere,
+        comment: tool.schema
+          .string()
+          .optional()
+          .describe('Texto do comentario. O anexo vai embutido depois dele. Sem isto, so anexa.'),
+      },
+      async execute(args, toolCtx) {
+        const { repo, n } = await target(ctx, store, args, toolCtx.sessionID);
+        const warn = assertProse(args.comment, 'comentario do anexo', ctx.config.prose);
+        const file = resolvePath(directory, args.path);
+        const name = basename(file);
+        const bytes = new Uint8Array(await readFile(file));
+        const asset = await ctx.host.uploadIssueAsset(repo, n, {
+          name,
+          bytes,
+          contentType: MIME[extOf(name)],
+        });
+        const md = embedAsset(asset);
+        if (args.comment) await ctx.host.createComment(repo, n, `${args.comment}\n\n${md}`);
+        return [
+          `Anexado a ${repo}#${n}: ${asset.name}${args.comment ? ' (comentario publicado)' : ''}`,
+          asset.url,
+          `Markdown: ${md}`,
+          warn,
+        ]
+          .filter(Boolean)
+          .join('\n');
+      },
+    }),
+
     issue_update: tool({
       description:
         'Atualiza titulo, corpo e labels da issue. O corpo passa pela checagem de prosa. Use `add_labels` para transicao de status: uma label `Status/` nova substitui a anterior.',
@@ -520,12 +615,13 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
         const { repo, n } = await target(ctx, store, args, toolCtx.sessionID);
         const warn = assertProse(args.comment, 'comentario de fechamento', ctx.config.prose);
         if (args.comment) await ctx.host.createComment(repo, n, args.comment);
-        await ctx.host.updateIssue(repo, n, {
+        const after = await ctx.host.updateIssue(repo, n, {
           state: 'closed',
           stateReason: args.state_reason ?? 'completed',
         });
         ctx.notify(`Issue fechada: ${repo}#${n}`, 'success');
-        return [`${repo}#${n} fechada.`, warn].filter(Boolean).join('\n');
+        const notes = await closeNotes(ctx, repo, after.milestone);
+        return [`${repo}#${n} fechada.`, warn, ...notes].filter(Boolean).join('\n');
       },
     }),
 
@@ -650,7 +746,8 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
         if (args.state) patch.state = args.state;
         if (!Object.keys(patch).length) throw new Error('nada para atualizar.');
         const after = await ctx.host.updateMilestone(repo, ms.id, patch);
-        return [`Marco atualizado: #${after.id} [${after.state}] ${after.title}`, warn]
+        const hint = args.state === 'closed' && ctx.config.closeHint ? [ctx.config.closeHint] : [];
+        return [`Marco atualizado: #${after.id} [${after.state}] ${after.title}`, warn, ...hint]
           .filter(Boolean)
           .join('\n');
       },

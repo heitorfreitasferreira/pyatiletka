@@ -109,6 +109,19 @@ export class Http {
     throw lastErr instanceof Error ? lastErr : new Error(`falha ao chamar ${path}`);
   }
 
+  /**
+   * POST multipart. Sem retry: reenviar um arquivo grande por engano duplicaria o
+   * anexo. O `Content-Type` fica por conta do fetch, que precisa gerar o boundary.
+   */
+  async upload<T = unknown>(path: string, form: FormData): Promise<T> {
+    const headers = this.headers();
+    delete headers['Content-Type'];
+    const res = await fetch(`${this.baseUrl}${path}`, { method: 'POST', headers, body: form });
+    const text = await res.text();
+    if (!res.ok) throw new GitHostError(res.status, path, this.redact(text));
+    return (text ? JSON.parse(text) : undefined) as T;
+  }
+
   /** GET/POST/PATCH/DELETE em um path relativo a base. Retry em 5xx/429. */
   async request<T = unknown>(path: string, opts: HttpOptions): Promise<T> {
     const { pageParam: _pageParam, ...rest } = opts;
