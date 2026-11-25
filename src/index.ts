@@ -157,6 +157,14 @@ export {
   type BindingStore,
 } from './core/binding';
 export { buildSystemHead, compactionNote } from './core/session';
+export {
+  GOAL_DONE,
+  GOAL_MAX,
+  bindSuffix,
+  goalObjective,
+  withBindTitle,
+  withoutBindTitle,
+} from './core/goal';
 export { classify, fmtComment, fmtIssue, priorityOf } from './core/format';
 export { buildBody, listTemplates, loadTemplate, splitFrontmatter } from './core/template';
 export { findMilestone, inMilestone, milestoneQueue } from './core/milestone';

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Build for development with sourcemaps and vendor splitting"
 #MISE sources=["src/**/*"]
-#MISE outputs=["dist/index.js", "dist/index.js.map", "dist/vendor.js"]
+#MISE outputs=["dist/index.js", "dist/index.js.map", "dist/vendor.js", "dist/tui.js"]
 
 bun build ./src/index.ts \
   --outdir dist \
@@ -11,3 +11,5 @@ bun build ./src/index.ts \
   --splitting \
   --entry-naming='[dir]/[name].js' \
   --chunk-naming='[name].js'
+
+bun build ./src/tui.ts --outfile dist/tui.js --target bun --sourcemap=inline

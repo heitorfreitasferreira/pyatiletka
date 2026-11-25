@@ -131,10 +131,10 @@ export type IssueFields = {
 /**
  * Monta o corpo da issue a partir dos campos. `objetivo` e obrigatorio: e a
  * secao que o `milestone_view` e o agente leem para saber o que a issue
- * entrega.
+ * entrega, e e a base do `/goal` no bind.
  */
 export function buildBody(fields: IssueFields): string {
-  if (!fields.objetivo) throw new Error('`objetivo` e obrigatorio com template.');
+  if (!fields.objetivo) throw new Error('`objetivo` e obrigatorio.');
   const partes = [`## Objetivo\n\n${fields.objetivo}`];
   if (fields.criterios?.length) {
     partes.push(`## Criterio de aceite\n\n${fields.criterios.map((c) => `- [ ] ${c}`).join('\n')}`);

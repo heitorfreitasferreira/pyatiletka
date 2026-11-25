@@ -6,6 +6,7 @@ import { assertProse } from '../prose';
 import { expandRepos, parseRef, parseRefs, pickRepo, type Ctx } from '../core/context';
 import { fileBinding, type BindingStore } from '../core/binding';
 import { classify, dateField, fmtComment, fmtIssue, priorityOf } from '../core/format';
+import { goalObjective } from '../core/goal';
 import { findMilestone, inMilestone, milestoneQueue, type Deps } from '../core/milestone';
 import { buildBody, listTemplates, loadTemplate } from '../core/template';
 import type { Issue, Milestone } from '../providers/types';
@@ -132,11 +133,14 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
   const resolve = (arg?: string) => pickRepo(ctx, arg);
   const store = binding ?? fileBinding(directory, stateDir ?? ctx.stateDir);
   const refTool = (name: string) => toolRef(ctx.toolPrefix, name);
+  const askTool = ctx.toolPrefix ? 'a tool de pergunta do host' : 'a tool `question`';
+  const goalBind = ctx.goal ? ' e o `/goal` sera definido para ela' : '';
+  const goalBase = ctx.goal ? ', que e a base do `/goal` no bind' : '';
+  const goalNext = ctx.goal ? ' O vinculo e o /goal ficam' : ' O vinculo fica';
 
   return toolSpecs({
     issue_bind: tool({
-      description:
-        'Vincula ESTA sessao a uma issue. Toda conversa passa a receber o corpo e os comentarios da issue automaticamente. Chame sempre que comecar ou continuar trabalho.',
+      description: `Vincula ESTA sessao a uma issue. Antes de chamar, confirme com o usuario por ${askTool} que a partir dali a sessao sera desta issue${goalBind}. Depois do sim, chame esta tool. Toda conversa passa a receber o corpo e os comentarios da issue automaticamente.`,
       args: {
         issue: issueArg,
         repo: repoArgHere,
@@ -155,16 +159,27 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
           repo,
           issue: n,
           milestone,
+          goal: goalObjective({ repo, number: n, title: issue.title, body: issue.body }),
+          issueTitle: issue.title,
           boundAt: new Date().toISOString(),
         });
         ctx.notify(`Vinculado: ${repo}#${n} - ${issue.title}`);
-        const where = file ? ` (arquivo: ${file})` : '';
-        return `Vinculado a ${repo}#${n}${where}\n\n${fmtIssue(issue)}`;
+        const where = file ? `Vinculo salvo em ${file}.` : '';
+        return [
+          `A PARTIR DE AGORA esta sessao esta vinculada a ${repo}#${n}.`,
+          where,
+          '',
+          fmtIssue(issue),
+        ]
+          .filter(Boolean)
+          .join('\n');
       },
     }),
 
     issue_unbind: tool({
-      description: 'Desvincula a sessao da issue atual.',
+      description: ctx.goal
+        ? 'Desvincula a sessao da issue atual, limpa o `/goal` e tira o sufixo do titulo.'
+        : 'Desvincula a sessao da issue atual.',
       args: {},
       async execute(_args, toolCtx) {
         const b = await store.read(toolCtx.sessionID);
@@ -408,14 +423,14 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
     }),
 
     issue_create: tool({
-      description: `Cria uma issue (task) no repo. Com \`template\` e sem \`body\`, monta o corpo a partir dos campos. \`depende\` grava as dependencias na secao de dependencias da API, que e o que o \`${refTool('milestone_view')}\` le para montar a fila. O texto passa pela checagem de prosa: travessao, ponto e virgula e frases de formula sao recusados. \`bind: true\` vincula a sessao a issue criada.`,
+      description: `Cria uma issue (task) no repo. \`objetivo\` e obrigatorio e vira a secao \`## Objetivo\`${goalBase}. Com \`template\` e sem \`body\`, monta o corpo a partir dos campos. \`depende\` grava as dependencias na secao de dependencias da API, que e o que o \`${refTool('milestone_view')}\` le para montar a fila. O texto passa pela checagem de prosa: travessao, ponto e virgula e frases de formula sao recusados. Esta tool nao vincula: depois de criar, chame \`${refTool('issue_bind')}\` para definir o vinculo${ctx.goal ? ' e o `/goal`' : ''}.`,
       args: {
         title: tool.schema.string(),
         body: tool.schema
           .string()
           .optional()
           .describe(
-            'Corpo markdown. Com `template`, ignore: e montado a partir dos campos abaixo.'
+            'Corpo markdown adicional. Com `template`, ignore: e montado a partir dos campos abaixo. Sem template, as secoes de objetivo e criterio sao anexadas.'
           ),
         template: tool.schema
           .string()
@@ -423,8 +438,9 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
           .describe('Nome do template do repo (ex.: `task`). Mutuamente exclusivo com `body`.'),
         objetivo: tool.schema
           .string()
-          .optional()
-          .describe('Secao `## Objetivo`: o que muda quando fechar.'),
+          .describe(
+            `Obrigatorio. Secao \`## Objetivo\`: o que muda quando fechar.${ctx.goal ? ' E a base do `/goal` no bind.' : ''}`
+          ),
         criterios: tool.schema
           .array(tool.schema.string())
           .optional()
@@ -446,17 +462,14 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
           .describe(
             "Ex.: ['Kind/Enhancement','Priority/Medium'] ou 'Kind/Enhancement,Priority/Medium'. Sem `template`, o padrao e Priority/Medium (so se existir no repo)."
           ),
-        bind: tool.schema
-          .boolean()
-          .optional()
-          .describe('Vincula a sessao a issue criada (default false).'),
         repo: repoArgHere,
       },
-      async execute(args, toolCtx) {
+      async execute(args) {
         const repo = resolve(args.repo);
         if (args.body && args.template) throw new Error('use `body` ou `template`, nao os dois.');
 
-        let body = args.body ?? '';
+        const sections = buildBody(args);
+        let body = args.body ? [args.body, sections].filter(Boolean).join('\n\n') : sections;
         let labels = args.labels;
         let title = args.title;
 
@@ -470,7 +483,7 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
 
         if (args.template) {
           const tpl = loadTemplate(directory, repo, args.template);
-          body = buildBody(args);
+          body = sections;
           // Prefixo e labels do frontmatter, como a UI faria.
           if (tpl.titlePrefix && !title.startsWith(tpl.titlePrefix)) {
             title = `${tpl.titlePrefix}${title}`;
@@ -498,36 +511,6 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
         const blockers = parseRefs(args.depende);
         if (blockers.length) await ctx.host.addDependencies(repo, created.number, blockers);
 
-        // Bind se pedido
-        if (args.bind) {
-          const file = await store.write(toolCtx.sessionID, {
-            repo,
-            issue: created.number,
-            milestone: args.milestone ?? created.milestone?.title,
-            boundAt: new Date().toISOString(),
-          });
-          ctx.notify(`Issue criada e vinculada: ${repo}#${created.number}`, 'success');
-          const where = file ? ` (arquivo: ${file})` : '';
-          const saved = await ctx.host
-            .listDependencies(repo, created.number)
-            .catch(() => [] as Issue[]);
-          const after = await ctx.host.getIssue(repo, created.number);
-          return [
-            `Criada a partir de ${args.template ? `template "${args.template}"` : 'body literal'}.`,
-            fmtIssue(after),
-            blockers.length
-              ? `  depende de: ${saved.map((d) => `#${d.number}`).join(', ')}`
-              : '  depende de: nada',
-            '',
-            '--- corpo ---',
-            body,
-            warn,
-            `Vinculado a ${repo}#${created.number}${where}`,
-          ]
-            .filter(Boolean)
-            .join('\n');
-        }
-
         ctx.notify(`Issue criada: ${repo}#${created.number}`, 'success');
         const saved = await ctx.host
           .listDependencies(repo, created.number)
@@ -543,6 +526,7 @@ export function issueTools({ ctx, directory, binding, stateDir }: IssueToolsInpu
           '--- corpo ---',
           body,
           warn,
+          `Objetivo registrado no corpo.${goalNext} para ${refTool('issue_bind')} depois.`,
         ]
           .filter(Boolean)
           .join('\n');

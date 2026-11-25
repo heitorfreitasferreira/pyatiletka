@@ -93,8 +93,10 @@ afterEach(() => {
 describe('issue_bind', () => {
   it('grava o vinculo e devolve a issue', async () => {
     const out = await run('issue_bind', { issue: '1' });
-    expect(out).toContain('Vinculado a org/repo#1');
-    expect(readBinding(dir, SESSION)).toMatchObject({ repo: REPO, issue: 1 });
+    expect(out).toContain('vinculada a org/repo#1');
+    const b = readBinding(dir, SESSION);
+    expect(b).toMatchObject({ repo: REPO, issue: 1, issueTitle: 'Corrigir fila' });
+    expect(b?.goal).toContain('Resolver org/repo#1: Corrigir fila');
     expect(toasts[0]?.message).toContain('org/repo#1');
   });
 
@@ -272,8 +274,30 @@ describe('issue_list', () => {
 
 describe('issue_create', () => {
   it('sem template, aplica Priority/Medium por padrao', async () => {
-    await run('issue_create', { title: 'Nova', body: 'texto' });
+    await run('issue_create', {
+      title: 'Nova',
+      body: 'texto',
+      objetivo: 'a fila para de travar',
+    });
     expect(host.called('createIssue')[0]?.args[1]).toMatchObject({ labels: ['Priority/Medium'] });
+  });
+
+  it('sem template, anexa objetivo e criterio ao body literal', async () => {
+    const out = await run('issue_create', {
+      title: 'Nova',
+      body: 'contexto extra',
+      objetivo: 'a fila para de travar',
+      criterios: ['teste passa'],
+    });
+    const input = host.called('createIssue')[0]?.args[1] as { body: string };
+    expect(input.body).toBe(
+      'contexto extra\n\n## Objetivo\n\na fila para de travar\n\n## Criterio de aceite\n\n- [ ] teste passa'
+    );
+    expect(out).toContain('issue_bind');
+  });
+
+  it('objetivo e obrigatorio', async () => {
+    expect(await runFail('issue_create', { title: 'x', body: 'y' })).toContain('objetivo');
   });
 
   it('com template, monta corpo e aplica prefixo e labels do frontmatter', async () => {
@@ -305,38 +329,62 @@ describe('issue_create', () => {
   });
 
   it('body e template sao mutuamente exclusivos', async () => {
-    expect(await runFail('issue_create', { title: 'x', body: 'y', template: 'task' })).toContain(
-      'nao os dois'
-    );
+    expect(
+      await runFail('issue_create', {
+        title: 'x',
+        body: 'y',
+        template: 'task',
+        objetivo: 'algo',
+      })
+    ).toContain('nao os dois');
   });
 
   it('depende vai para a API, nao para o corpo', async () => {
-    await run('issue_create', { title: 'x', body: 'y', depende: ['#1', 'abc'] });
+    await run('issue_create', {
+      title: 'x',
+      body: 'y',
+      objetivo: 'algo',
+      depende: ['#1', 'abc'],
+    });
     expect(host.called('addDependencies')[0]?.args).toEqual([REPO, expect.any(Number), [1]]);
-    expect(host.called('createIssue')[0]?.args[1]).toMatchObject({ body: 'y' });
+    const input = host.called('createIssue')[0]?.args[1] as { body: string };
+    expect(input.body).toContain('y');
   });
 
   it('milestone por titulo parcial resolve e aplica', async () => {
-    await run('issue_create', { title: 'x', body: 'y', milestone: 'Entre' });
+    await run('issue_create', { title: 'x', body: 'y', objetivo: 'algo', milestone: 'Entre' });
     expect(host.called('setIssueMilestone')[0]?.args[2]).toBe(13);
   });
 
   it('milestone ambiguo e recusado', async () => {
     host.state.milestones.push(makeMilestone({ id: 14, title: 'Entrega extra' }));
-    expect(await runFail('issue_create', { title: 'x', body: 'y', milestone: 'Entre' })).toContain(
-      'casa com 2 marcos'
-    );
+    expect(
+      await runFail('issue_create', {
+        title: 'x',
+        body: 'y',
+        objetivo: 'algo',
+        milestone: 'Entre',
+      })
+    ).toContain('casa com 2 marcos');
   });
 
   it('prosa com travessao bloqueia e nada e gravado', async () => {
-    const out = await runFail('issue_create', { title: 'x', body: 'faz o servidor — rapido' });
+    const out = await runFail('issue_create', {
+      title: 'x',
+      body: 'faz o servidor — rapido',
+      objetivo: 'algo',
+    });
     expect(out).toContain('NAO foi gravado');
     expect(host.called('createIssue')).toHaveLength(0);
   });
 
   it('prosa em warn devolve o aviso e grava', async () => {
     tools = toV1Tools(issueTools({ ctx: ctxFor(host, 'warn'), directory: dir })) as never;
-    const out = await run('issue_create', { title: 'x', body: 'faz o servidor — rapido' });
+    const out = await run('issue_create', {
+      title: 'x',
+      body: 'faz o servidor — rapido',
+      objetivo: 'algo',
+    });
     expect(out).toContain('aviso');
     expect(host.called('createIssue')).toHaveLength(1);
   });

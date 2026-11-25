@@ -37,6 +37,14 @@ export class FakePluginContext {
     project: { id: 'proj', directory: '/w', canonical: '/w' },
   };
   options: Record<string, unknown> = {};
+  readonly sessions = new Map<string, { title?: string; parentID?: string }>();
+  readonly sessionUpdates: Array<{ sessionID: string; title?: string }> = [];
+  readonly sessionCommands: Array<{
+    sessionID: string;
+    name: string;
+    text: string;
+    delivery?: string;
+  }> = [];
 
   private currentNamespace = '';
 
@@ -64,6 +72,26 @@ export class FakePluginContext {
     hook: async (name: string, cb: FakeHook) => {
       this.sessionHooks.set(name, cb);
       return { dispose: async () => {} };
+    },
+    get: async (input: { sessionID: string }) => {
+      const session = this.sessions.get(input.sessionID);
+      return session
+        ? { id: input.sessionID, ...session }
+        : { id: input.sessionID, title: undefined, parentID: undefined };
+    },
+    update: async (input: { sessionID: string; title?: string }) => {
+      this.sessionUpdates.push(input);
+      if (input.title === undefined) return;
+      const current = this.sessions.get(input.sessionID) ?? {};
+      this.sessions.set(input.sessionID, { ...current, title: input.title });
+    },
+    command: async (input: {
+      sessionID: string;
+      name: string;
+      text: string;
+      delivery?: string;
+    }) => {
+      this.sessionCommands.push(input);
     },
   };
 

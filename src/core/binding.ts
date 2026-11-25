@@ -23,6 +23,10 @@ export type Binding = {
   repo: string;
   issue?: number;
   milestone?: string;
+  /** Objetivo do `/goal`, composto no bind a partir da issue. */
+  goal?: string;
+  /** Titulo da issue no momento do bind, para o titulo da sessao sem outra leitura. */
+  issueTitle?: string;
   boundAt: string;
 };
 

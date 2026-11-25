@@ -48,8 +48,11 @@ function coreCtx(host: FakeGitHost): Ctx {
   return { host, config: makeConfig(), remote: REPO, defaultRepo: REPO, notify: () => {} };
 }
 
-const boundTo = (issue: number): BindingStore => ({
-  read: () => ({ repo: REPO, issue, boundAt: '2026-01-01T00:00:00Z' }),
+const boundTo = (
+  issue: number,
+  extra: { goal?: string; issueTitle?: string } = {}
+): BindingStore => ({
+  read: () => ({ repo: REPO, issue, boundAt: '2026-01-01T00:00:00Z', ...extra }),
   write: () => undefined,
   clear: () => true,
 });
@@ -84,6 +87,14 @@ describe('setupV2', () => {
     expect(Object.keys(props).sort()).toEqual(['issue', 'milestone', 'repo']);
   });
 
+  it('issue_create exige objetivo e nao vincula', async () => {
+    await setupV2(asV2());
+    const create = plugin.tools.find((t) => t.namespace === 'issue' && t.name === 'create')!;
+    const input = create.input as { required?: string[]; properties: Record<string, unknown> };
+    expect(input.required).toContain('objetivo');
+    expect(Object.keys(input.properties)).not.toContain('bind');
+  });
+
   it('execute roteia para o handler da spec', async () => {
     await setupV2(asV2());
     const unbind = plugin.tools.find((t) => t.namespace === 'issue' && t.name === 'unbind')!;
@@ -108,7 +119,7 @@ describe('registerHooks v2', () => {
     expect(event.system[0].text).toContain('Fila do marco');
   });
 
-  it('context nao injeta nada sem vinculo', async () => {
+  it('context sem vinculo pede confirmacao antes do bind', async () => {
     const semVinculo: BindingStore = {
       read: () => undefined,
       write: () => undefined,
@@ -118,7 +129,24 @@ describe('registerHooks v2', () => {
 
     const event = { sessionID: 'ses_1', system: [] as { type: string; text: string }[] };
     await plugin.sessionHooks.get('context')!(event);
-    expect(event.system).toHaveLength(0);
+    expect(event.system).toHaveLength(1);
+    expect(event.system[0].text).toContain('question');
+    expect(event.system[0].text).toContain('/goal');
+  });
+
+  it('context com goal injeta a regra do goal', async () => {
+    const host = new FakeGitHost({ issues: [makeIssue({ number: 7, title: 'Fila do marco' })] });
+    await registerHooks(
+      asV2(),
+      coreCtx(host),
+      '/w',
+      boundTo(7, { goal: 'Resolver org/repo#7: Fila do marco' })
+    );
+
+    const event = { sessionID: 'ses_1', system: [] as { type: string; text: string }[] };
+    await plugin.sessionHooks.get('context')!(event);
+    expect(event.system).toHaveLength(2);
+    expect(event.system[1].text).toContain('/goal');
   });
 
   it('compaction preserva a referencia da issue', async () => {
@@ -141,5 +169,97 @@ describe('registerHooks v2', () => {
     };
     await plugin.toolHooks.get('execute.after')!(event);
     expect(event.result.content).toBe('original');
+  });
+
+  it('execute.after faz bind: titulo e /goal', async () => {
+    plugin.sessions.set('ses_1', { title: 'Minha sessao' });
+    await registerHooks(
+      asV2(),
+      coreCtx(new FakeGitHost()),
+      '/w',
+      boundTo(7, { goal: 'Resolver org/repo#7: Fila do marco', issueTitle: 'Fila do marco' })
+    );
+
+    const event = {
+      tool: 'issue_bind',
+      status: 'completed',
+      sessionID: 'ses_1',
+      input: {},
+      result: { content: 'A PARTIR DE AGORA esta sessao esta vinculada a org/repo#7.' },
+    };
+    await plugin.toolHooks.get('execute.after')!(event);
+
+    expect(plugin.sessionUpdates).toEqual([{ sessionID: 'ses_1', title: 'Minha sessao [repo#7]' }]);
+    expect(plugin.sessionCommands).toEqual([
+      {
+        sessionID: 'ses_1',
+        name: 'goal',
+        text: 'Resolver org/repo#7: Fila do marco',
+        delivery: 'queue',
+      },
+    ]);
+    expect(event.result.content).toContain('O /goal desta sessao');
+  });
+
+  it('bind usa o titulo da issue quando a sessao ainda nao tem nome', async () => {
+    plugin.sessions.set('ses_1', { title: 'New session' });
+    await registerHooks(
+      asV2(),
+      coreCtx(new FakeGitHost()),
+      '/w',
+      boundTo(7, { goal: 'Resolver org/repo#7: Fila do marco', issueTitle: 'Fila do marco' })
+    );
+
+    const event = {
+      tool: 'issue_bind',
+      status: 'completed',
+      sessionID: 'ses_1',
+      input: {},
+      result: { content: '' },
+    };
+    await plugin.toolHooks.get('execute.after')!(event);
+
+    expect(plugin.sessionUpdates).toEqual([
+      { sessionID: 'ses_1', title: 'Fila do marco [repo#7]' },
+    ]);
+  });
+
+  it('bind em subagente nao mexe no titulo nem no goal', async () => {
+    plugin.sessions.set('ses_1', { title: 'Sub', parentID: 'ses_0' });
+    await registerHooks(
+      asV2(),
+      coreCtx(new FakeGitHost()),
+      '/w',
+      boundTo(7, { goal: 'Resolver org/repo#7' })
+    );
+
+    const event = {
+      tool: 'issue_bind',
+      status: 'completed',
+      sessionID: 'ses_1',
+      input: {},
+      result: { content: '' },
+    };
+    await plugin.toolHooks.get('execute.after')!(event);
+
+    expect(plugin.sessionUpdates).toHaveLength(0);
+    expect(plugin.sessionCommands).toHaveLength(0);
+  });
+
+  it('execute.after faz unbind: tira o sufixo e limpa o goal', async () => {
+    plugin.sessions.set('ses_1', { title: 'Minha sessao [repo#7]' });
+    await registerHooks(asV2(), coreCtx(new FakeGitHost()), '/w', boundTo(7));
+
+    const event = {
+      tool: 'issue_unbind',
+      status: 'completed',
+      sessionID: 'ses_1',
+      input: {},
+      result: { content: 'Sessao desvinculada.' },
+    };
+    await plugin.toolHooks.get('execute.after')!(event);
+
+    expect(plugin.sessionUpdates).toEqual([{ sessionID: 'ses_1', title: 'Minha sessao' }]);
+    expect(plugin.sessionCommands).toEqual([{ sessionID: 'ses_1', name: 'goal', text: 'clear' }]);
   });
 });
